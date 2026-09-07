@@ -2,7 +2,9 @@ package com.nuvio.app.features.addons
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.nuvio.app.core.build.AppVersionPolicy
 import com.nuvio.app.core.diagnostics.SentryNetworkBreadcrumbInterceptor
+import com.nuvio.app.core.network.ApachiyAddonAuthInterceptor
 import com.nuvio.app.core.network.IPv4FirstDns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -105,6 +107,22 @@ private fun buildAddonHttpClient(cache: Cache? = null): OkHttpClient =
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .addInterceptor(ApachiyAddonAuthInterceptor())
+        .addInterceptor { chain ->
+            val request = chain.request()
+            if (request.header("User-Agent") != null) {
+                chain.proceed(request)
+            } else {
+                chain.proceed(
+                    request.newBuilder()
+                        .header(
+                            "User-Agent",
+                            "${AppVersionPolicy.userAgentAppName}/${AppVersionPolicy.displayVersionName.ifBlank { "dev" }}",
+                        )
+                        .build(),
+                )
+            }
+        }
         .addInterceptor(SentryNetworkBreadcrumbInterceptor())
         .proxy(Proxy.NO_PROXY)
         .apply {

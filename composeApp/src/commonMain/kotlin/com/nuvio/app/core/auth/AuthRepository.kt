@@ -105,9 +105,11 @@ object AuthRepository {
     suspend fun signUpWithEmail(email: String, password: String): Result<Unit> = runCatching {
         _error.value = null
         lastAuthKind = LastAuthKind.SignUp
+        val sanitizedEmail = sanitizeAuthCredential(email)
+        val sanitizedPassword = sanitizeAuthCredential(password, trim = false)
         SupabaseProvider.client.auth.signUpWith(Email) {
-            this.email = email
-            this.password = password
+            this.email = sanitizedEmail
+            this.password = sanitizedPassword
         }
         Unit
     }.onFailure { e ->
@@ -120,9 +122,11 @@ object AuthRepository {
     suspend fun signInWithEmail(email: String, password: String): Result<Unit> = runCatching {
         _error.value = null
         lastAuthKind = LastAuthKind.SignIn
+        val sanitizedEmail = sanitizeAuthCredential(email)
+        val sanitizedPassword = sanitizeAuthCredential(password, trim = false)
         SupabaseProvider.client.auth.signInWith(Email) {
-            this.email = email
-            this.password = password
+            this.email = sanitizedEmail
+            this.password = sanitizedPassword
         }
     }.onFailure { e ->
         if (e is CancellationException) throw e
@@ -295,4 +299,13 @@ object AuthRepository {
 
     private suspend fun userFacingAuthError(error: Throwable): String =
         getString(authErrorStringResource(error))
+}
+
+internal fun sanitizeAuthCredential(value: String, trim: Boolean = true): String {
+    val withoutNuls = buildString(value.length) {
+        value.forEach { ch ->
+            if (ch != '\u0000') append(ch)
+        }
+    }
+    return if (trim) withoutNuls.trim() else withoutNuls
 }

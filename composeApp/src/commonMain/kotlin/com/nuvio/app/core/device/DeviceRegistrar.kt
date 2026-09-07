@@ -20,6 +20,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.TimeMark
@@ -36,6 +40,13 @@ object DeviceRegistrar {
     private val mutex = Mutex()
     private var lastAttemptMark: TimeMark? = null
     private var observingStarted = false
+    private val _initialRegistrationCompleted = MutableStateFlow(false)
+    val initialRegistrationCompleted: StateFlow<Boolean> = _initialRegistrationCompleted.asStateFlow()
+
+    suspend fun awaitInitialRegistration() {
+        if (_initialRegistrationCompleted.value) return
+        initialRegistrationCompleted.first { it }
+    }
 
     fun startObserving() {
         if (observingStarted) return
@@ -46,8 +57,10 @@ object DeviceRegistrar {
                 .distinctUntilChanged()
                 .collect { isAuthed ->
                     if (isAuthed) {
+                        _initialRegistrationCompleted.value = false
                         registerNow()
                     } else {
+                        _initialRegistrationCompleted.value = false
                         SyncClientIdentity.clearRegisteredDeviceId()
                     }
                 }
@@ -82,6 +95,7 @@ object DeviceRegistrar {
             try {
                 attemptWithRetry(accessToken, request)
             } finally {
+                _initialRegistrationCompleted.value = true
                 AccountStatusRepository.refresh()
             }
         }

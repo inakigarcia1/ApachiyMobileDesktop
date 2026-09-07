@@ -78,6 +78,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.DeviceLinkAuthRepository
 import com.nuvio.app.core.auth.DeviceLinkAuthState
+import com.nuvio.app.core.auth.sanitizeAuthCredential
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.features.settings.AppBrandWordmark
@@ -204,7 +205,7 @@ fun AuthScreen(
     val connectionTimeoutMessage = stringResource(Res.string.account_error_connection_timeout)
 
     fun submitAuth() {
-        val trimmedEmail = email.trim()
+        val trimmedEmail = sanitizeAuthCredential(email)
         val configuration = ServerConfigurationRepository.active.value
         when {
             isLoading -> return
@@ -214,7 +215,7 @@ fun AuthScreen(
             trimmedEmail.isBlank() || !trimmedEmail.contains('@') -> {
                 AuthRepository.setError(invalidEmailMessage)
             }
-            password.length < 6 -> {
+            sanitizeAuthCredential(password, trim = false).length < 6 -> {
                 AuthRepository.setError(passwordTooShortMessage)
             }
             else -> {

@@ -15,19 +15,28 @@ data class DeviceRegistrationRequest(
 
 @Serializable
 data class DeviceRegistrationResponse(
-    @SerialName("device_id") val deviceId: Long,
+    @SerialName("device_id") private val deviceIdSnake: Long = 0,
+    @SerialName("deviceId") private val deviceIdCamel: Long = 0,
     @SerialName("created") val created: Boolean = false,
     @SerialName("revoked") val revoked: Boolean = false,
     @SerialName("last_login_at") val lastLoginAt: String? = null,
     @SerialName("last_seen_at") val lastSeenAt: String? = null,
-)
+) {
+    val deviceId: Long
+        get() = deviceIdSnake.takeIf { it > 0L } ?: deviceIdCamel
+}
 
 @Serializable
 data class DeviceSummaryDto(
-    val id: Long,
+    val id: Long = 0,
+    @SerialName("deviceId") val deviceId: Long = 0,
+    @SerialName("device_id") val deviceIdSnake: Long = 0,
     @SerialName("installationId") val installationId: String = "",
     @SerialName("installation_id") val installationIdSnake: String = "",
 ) {
+    val resolvedDeviceId: Long
+        get() = id.takeIf { it > 0L } ?: deviceId.takeIf { it > 0L } ?: deviceIdSnake
+
     val resolvedInstallationId: String
         get() = installationId.ifBlank { installationIdSnake }
 }

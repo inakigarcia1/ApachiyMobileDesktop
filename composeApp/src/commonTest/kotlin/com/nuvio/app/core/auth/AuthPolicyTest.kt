@@ -5,6 +5,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.account_error_invalid_credentials
+import nuvio.composeapp.generated.resources.account_error_service_unavailable
 import kotlin.test.assertEquals
 
 class AuthPolicyTest {
@@ -22,6 +23,24 @@ class AuthPolicyTest {
         assertEquals(
             Res.string.account_error_invalid_credentials,
             authErrorStringResource(RuntimeException("Invalid login credentials")),
+        )
+    }
+
+    @Test
+    fun stripsNullBytesFromAuthCredentials() {
+        val dirtyEmail = "user\u0000@apachiy.org\u0000"
+        val dirtyPassword = "secret\u0000pass"
+        assertEquals("user@apachiy.org", sanitizeAuthCredential(dirtyEmail))
+        assertEquals("secretpass", sanitizeAuthCredential(dirtyPassword, trim = false))
+    }
+
+    @Test
+    fun mapsSchemaQueryFailureToServiceUnavailable() {
+        assertEquals(
+            Res.string.account_error_service_unavailable,
+            authErrorStringResource(
+                RuntimeException("500: Database error querying schema unexpected_failure"),
+            ),
         )
     }
 }

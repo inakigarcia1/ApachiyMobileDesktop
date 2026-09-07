@@ -1284,6 +1284,9 @@ kotlin {
                 implementation("com.google.code.gson:gson:2.11.0")
                 implementation("io.github.peerless2012:ass-media:0.4.0-beta01")
                 implementation(libs.ktor.client.okhttp)
+                implementation("io.coil-kt.coil3:coil-network-okhttp:${libs.versions.coil.get()}") {
+                    exclude(group = "org.jetbrains.skiko", module = "skiko")
+                }
                 implementation(libs.sentry.android)
                 implementation(libs.androidx.media3.exoplayer.hls)
                 implementation(libs.androidx.media3.exoplayer.dash)

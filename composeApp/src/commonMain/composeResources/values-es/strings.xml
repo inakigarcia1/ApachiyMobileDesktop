@@ -1238,7 +1238,7 @@
     <string name="home_continue_watching_hours_minutes_left">Falta %1$dh %2$dm</string>
     <string name="home_continue_watching_minutes_left">Faltan %1$dm</string>
     <string name="home_empty_no_active_addons_message">Gestione su cuenta en apachiy.org/dashboard.</string>
-    <string name="home_empty_no_active_addons_title">No se pudo cargar el catálogo.</string>
+    <string name="home_empty_no_active_addons_title">Error al buscar el catálogo</string>
     <string name="home_empty_no_rows_message">Los addons instalados no exponen actualmente catálogos compatibles con el tablero sin extras requeridos.</string>
     <string name="home_empty_no_rows_title">No hay filas de inicio disponibles</string>
     <string name="home_view_details">Ver detalles</string>
@@ -1554,6 +1554,12 @@
     <string name="library_other">Otro</string>
     <string name="library_source_cloud">Nube</string>
     <string name="library_source_saved">Guardado</string>
+    <string name="library_filter_sort">Ordenar biblioteca</string>
+    <string name="library_sort_added_asc">Más antiguos</string>
+    <string name="library_sort_added_desc">Agregados recientemente</string>
+    <string name="library_sort_title_asc">Título A–Z</string>
+    <string name="library_sort_title_desc">Título Z–A</string>
+    <string name="library_sort_provider_order">Orden del rastreador</string>
     <string name="library_title">Biblioteca</string>
     <string name="library_trakt_empty_message">Conecta Trakt y guarda títulos en tu lista de seguimiento o listas personales.</string>
     <string name="library_trakt_empty_title">Tu biblioteca de Trakt está vacía</string>

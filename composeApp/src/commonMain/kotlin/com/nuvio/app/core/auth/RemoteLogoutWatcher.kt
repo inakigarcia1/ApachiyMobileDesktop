@@ -2,6 +2,7 @@ package com.nuvio.app.core.auth
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.device.ApachiyDeviceApi
+import com.nuvio.app.core.device.DeviceRegistrar
 import com.nuvio.app.core.network.ApachiyConfig
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.sync.SyncClientIdentity
@@ -116,13 +117,21 @@ object RemoteLogoutWatcher {
     }
 
     private suspend fun pollDeviceList() {
-        delay(LIST_POLL_INITIAL_DELAY_MS)
+        DeviceRegistrar.awaitInitialRegistration()
+        delay(REGISTRATION_GRACE_PERIOD_MS)
+        var consecutiveMisses = 0
         while (true) {
             val installationId = SyncClientIdentity.currentClientId()
-            if (!stillRegisteredOnApi(installationId)) {
-                log.w { "device missing from API list; signing out" }
-                AuthRepository.signOut()
-                return
+            val stillRegistered = stillRegisteredOnApi(installationId)
+            if (stillRegistered) {
+                consecutiveMisses = 0
+            } else {
+                consecutiveMisses++
+                if (consecutiveMisses >= REQUIRED_CONSECUTIVE_MISSES) {
+                    log.w { "device missing from API list after $consecutiveMisses polls; signing out" }
+                    AuthRepository.signOut()
+                    return
+                }
             }
             delay(LIST_POLL_INTERVAL_MS)
         }
@@ -135,15 +144,23 @@ object RemoteLogoutWatcher {
         }.getOrNull() ?: return true
         return runCatching {
             val response = ApachiyDeviceApi.getDevices(token)
+            val registeredDeviceId = SyncClientIdentity.loadRegisteredDeviceId()
             when (response.status) {
-                401, 403, 410, 423 -> return@runCatching false
+                410, 423 -> return@runCatching false
+                401, 403 -> return@runCatching true
                 !in 200..299 -> return@runCatching true
             }
             val rows = ApachiyDeviceApi.decodeDeviceList(response.body) ?: return@runCatching true
-            rows.any { it.resolvedInstallationId.equals(installationId, ignoreCase = true) }
+            val matchesInstallation = rows.any {
+                it.resolvedInstallationId.equals(installationId, ignoreCase = true)
+            }
+            val matchesDeviceId = registeredDeviceId != null &&
+                rows.any { it.resolvedDeviceId == registeredDeviceId }
+            matchesInstallation || matchesDeviceId
         }.getOrDefault(true)
     }
 
-    private const val LIST_POLL_INITIAL_DELAY_MS = 4_000L
+    private const val REGISTRATION_GRACE_PERIOD_MS = 8_000L
     private const val LIST_POLL_INTERVAL_MS = 12_000L
+    private const val REQUIRED_CONSECUTIVE_MISSES = 3
 }

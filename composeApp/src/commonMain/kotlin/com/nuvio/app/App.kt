@@ -79,11 +79,6 @@ internal fun AppEnvironment(content: @Composable () -> Unit) {
             .memoryCachePolicy(CachePolicy.ENABLED)
             .components {
                 add(SvgDecoder.Factory())
-                add(
-                    coil3.network.ktor3.KtorNetworkFetcherFactory(
-                        cacheStrategy = { coil3.network.cachecontrol.CacheControlCacheStrategy() },
-                    ),
-                )
             }
             .configurePlatformImageLoader()
             .build()

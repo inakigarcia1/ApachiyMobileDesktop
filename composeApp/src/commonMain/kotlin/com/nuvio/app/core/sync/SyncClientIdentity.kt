@@ -12,23 +12,27 @@ private val UUID_V4_REGEX = Regex(
 private const val ORIGIN_CLIENT_ID_PARAM = "p_origin_client_id"
 
 object SyncClientIdentity {
+    private val cacheLock = Any()
     private var cachedClientId: String? = null
 
     fun currentClientId(): String {
         cachedClientId?.let { return it }
+        synchronized(cacheLock) {
+            cachedClientId?.let { return it }
 
-        val stored = SyncClientIdentityStorage.loadClientId()
-            ?.trim()
-            ?.takeIf(::isValidUuidV4)
-        if (stored != null) {
-            cachedClientId = stored
-            return stored
+            val stored = SyncClientIdentityStorage.loadClientId()
+                ?.trim()
+                ?.takeIf(::isValidUuidV4)
+            if (stored != null) {
+                cachedClientId = stored
+                return stored
+            }
+
+            val generated = generateClientId()
+            SyncClientIdentityStorage.saveClientId(generated)
+            cachedClientId = generated
+            return generated
         }
-
-        val generated = generateClientId()
-        SyncClientIdentityStorage.saveClientId(generated)
-        cachedClientId = generated
-        return generated
     }
 
     fun saveRegisteredDeviceId(deviceId: Long) {

@@ -52,6 +52,10 @@ fun authErrorStringResource(error: Throwable): StringResource {
             Res.string.account_error_connection_refused
         message.contains("not authenticated") -> Res.string.account_error_not_authenticated
         message.contains("404") || message.contains("could not find") -> Res.string.account_error_service_unavailable
+        message.contains("querying schema") ||
+            message.contains("invalid byte sequence") ||
+            message.contains("unexpected_failure") ->
+            Res.string.account_error_service_unavailable
         message.contains("400") || message.contains("bad request") -> Res.string.account_error_invalid_request
         else -> Res.string.account_error_unexpected
     }

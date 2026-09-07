@@ -134,6 +134,10 @@ fun HomeScreen(
     }
 
     val addonsUiState by AddonRepository.uiState.collectAsStateWithLifecycle()
+    val addonReconciliationComplete by AddonRepository.hasCompletedInitialAddonReconciliation.collectAsStateWithLifecycle()
+    val authState by AuthRepository.state.collectAsStateWithLifecycle()
+    val isAuthenticatedCloudUser =
+        authState is AuthState.Authenticated && !(authState as AuthState.Authenticated).isAnonymous
     val homeUiState by HomeRepository.uiState.collectAsStateWithLifecycle()
     val homeSettingsUiState by HomeCatalogSettingsRepository.uiState.collectAsStateWithLifecycle()
     val homeListState = rememberLazyListState()
@@ -526,8 +530,9 @@ fun HomeScreen(
         buildHomeCatalogRefreshSignature(enabledAddons)
     }
 
-    LaunchedEffect(catalogRefreshKey) {
+    LaunchedEffect(catalogRefreshKey, addonReconciliationComplete) {
         if (catalogRefreshKey.isEmpty()) return@LaunchedEffect
+        if (isAuthenticatedCloudUser && !addonReconciliationComplete) return@LaunchedEffect
         HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)
         HomeRepository.refresh(enabledAddons)
     }
@@ -779,6 +784,14 @@ fun HomeScreen(
     }
 
     val hasActiveAddons = enabledAddons.any { it.manifest != null }
+    val isAwaitingAddonSync =
+        isAuthenticatedCloudUser && !addonReconciliationComplete
+    val isAwaitingManifests =
+        isAuthenticatedCloudUser &&
+            addonReconciliationComplete &&
+            enabledAddons.isNotEmpty() &&
+            !hasActiveAddons &&
+            enabledAddons.any { it.isRefreshing }
     val showHeroSlot = homeSettingsUiState.heroEnabled
     val isResolvingHeroSources = enabledAddons.any { it.isRefreshing } || homeUiState.isLoading
     val showHeroSkeleton = showHeroSlot &&
@@ -910,7 +923,53 @@ fun HomeScreen(
             }
 
             when {
-                !hasActiveAddons && !hasRenderableCollectionRows -> {
+                isAwaitingAddonSync && !hasRenderableCollectionRows -> {
+                    homeContinueWatchingSections(
+                        preferences = continueWatchingPreferences,
+                        continueWatchingItems = continueWatchingItems,
+                        upcomingItems = upcomingItems,
+                        dataSourceKey = effectiveWatchProgressSource,
+                        sectionPadding = homeSectionPadding,
+                        layout = continueWatchingLayout,
+                        continueWatchingListState = continueWatchingListState,
+                        upcomingListState = upcomingListState,
+                        onItemClick = onContinueWatchingClick,
+                        onItemLongPress = onContinueWatchingLongPress,
+                        disintegrationRequest = continueWatchingDisintegrationRequest,
+                    )
+                    items(3) {
+                        HomeSkeletonRow(
+                            modifier = Modifier.padding(
+                                horizontal = if (isDesktop) homeSectionPadding else 16.dp,
+                            ),
+                        )
+                    }
+                }
+
+                isAwaitingManifests && !hasRenderableCollectionRows -> {
+                    homeContinueWatchingSections(
+                        preferences = continueWatchingPreferences,
+                        continueWatchingItems = continueWatchingItems,
+                        upcomingItems = upcomingItems,
+                        dataSourceKey = effectiveWatchProgressSource,
+                        sectionPadding = homeSectionPadding,
+                        layout = continueWatchingLayout,
+                        continueWatchingListState = continueWatchingListState,
+                        upcomingListState = upcomingListState,
+                        onItemClick = onContinueWatchingClick,
+                        onItemLongPress = onContinueWatchingLongPress,
+                        disintegrationRequest = continueWatchingDisintegrationRequest,
+                    )
+                    items(3) {
+                        HomeSkeletonRow(
+                            modifier = Modifier.padding(
+                                horizontal = if (isDesktop) homeSectionPadding else 16.dp,
+                            ),
+                        )
+                    }
+                }
+
+                !hasActiveAddons && !hasRenderableCollectionRows && !isAwaitingAddonSync -> {
                     homeContinueWatchingSections(
                         preferences = continueWatchingPreferences,
                         continueWatchingItems = continueWatchingItems,
@@ -929,8 +988,20 @@ fun HomeScreen(
                             modifier = Modifier.padding(
                                 horizontal = if (isDesktop) homeSectionPadding else 16.dp,
                             ),
-                            title = stringResource(Res.string.compose_search_empty_no_active_addons_title),
-                            message = stringResource(Res.string.home_empty_no_active_addons_message),
+                            title = stringResource(
+                                if (isDesktop && isAuthenticatedCloudUser) {
+                                    Res.string.home_empty_no_active_addons_title
+                                } else {
+                                    Res.string.compose_search_empty_no_active_addons_title
+                                },
+                            ),
+                            message = stringResource(
+                                if (isDesktop && isAuthenticatedCloudUser) {
+                                    Res.string.home_empty_no_active_addons_message
+                                } else {
+                                    Res.string.compose_search_empty_no_active_addons_message
+                                },
+                            ),
                         )
                     }
                 }

@@ -23,7 +23,7 @@ class DeviceListDecodeTest {
 
         val rows = ApachiyDeviceApi.decodeDeviceList(body)
         assertEquals(1, rows?.size)
-        assertEquals(40L, rows?.first()?.id)
+        assertEquals(40L, rows?.first()?.resolvedDeviceId)
         assertEquals("08da6e51-017c-4ce1-a026-2c8914ef2402", rows?.first()?.resolvedInstallationId)
     }
 
@@ -31,6 +31,23 @@ class DeviceListDecodeTest {
     fun wrappedEmptyDeviceListMeansTheSessionWasRemoved() {
         val rows = ApachiyDeviceApi.decodeDeviceList("""{"devices":[],"maxDevices":1}""")
         assertTrue(rows != null && rows.isEmpty())
+    }
+
+    @Test
+    fun wrappedDeviceListMatchesByDeviceIdWhenInstallationIdMissing() {
+        val body = """
+            {
+              "devices": [
+                { "id": 74, "name": "Pixel" }
+              ],
+              "maxDevices": 3
+            }
+        """.trimIndent()
+
+        val rows = ApachiyDeviceApi.decodeDeviceList(body)
+        assertEquals(1, rows?.size)
+        assertEquals(74L, rows?.first()?.resolvedDeviceId)
+        assertEquals("", rows?.first()?.resolvedInstallationId)
     }
 
     @Test
@@ -43,6 +60,7 @@ class DeviceListDecodeTest {
         val body = """[{"id":7,"installation_id":"abc-def"}]"""
         val rows = ApachiyDeviceApi.decodeDeviceList(body)
         assertEquals(1, rows?.size)
+        assertEquals(7L, rows?.first()?.resolvedDeviceId)
         assertEquals("abc-def", rows?.first()?.resolvedInstallationId)
     }
 }

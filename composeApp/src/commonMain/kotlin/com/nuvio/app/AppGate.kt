@@ -165,7 +165,9 @@ internal fun AppGate(
 
     LaunchedEffect(authState) {
         if (!ownsAppRuntime) return@LaunchedEffect
-        DeviceSessionRegistration.registerIfAuthenticated(force = true)
+        if (authState is AuthState.Authenticated && !(authState as AuthState.Authenticated).isAnonymous) {
+            DeviceSessionRegistration.registerIfAuthenticated()
+        }
     }
 
     LaunchedEffect(
@@ -377,6 +379,7 @@ internal fun AppGate(
                 val authenticatedState = authState as AuthState.Authenticated
                 ProfileRepository.ensureLoaded(authenticatedState.userId)
                 if (gateScreen == AppGateScreen.Loading.name || gateScreen == AppGateScreen.Auth.name) {
+                    ProfileRepository.pullProfiles()
                     enterProfileGate(ProfileRepository.state.value.profiles, syncOnEnter = true)
                 }
             }
