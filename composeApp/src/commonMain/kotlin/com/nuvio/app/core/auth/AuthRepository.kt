@@ -63,7 +63,12 @@ object AuthRepository {
                         _state.value = AuthState.Loading
                     }
                     is SessionStatus.RefreshFailure -> {
-                        _state.value = AuthState.Unauthenticated
+                        scope.launch {
+                            val recovered = refreshCurrentSession()
+                            if (!recovered) {
+                                _state.value = AuthState.Unauthenticated
+                            }
+                        }
                     }
                 }
             }
@@ -247,6 +252,9 @@ object AuthRepository {
     fun clearError() {
         _error.value = null
     }
+
+    fun hasPersistedSession(): Boolean =
+        !SupabaseProvider.client.auth.currentAccessTokenOrNull().isNullOrBlank()
 
     fun setError(message: String) {
         _error.value = message

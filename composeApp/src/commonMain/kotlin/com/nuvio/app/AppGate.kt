@@ -345,7 +345,30 @@ internal fun AppGate(
         }
     }
 
-    LaunchedEffect(authState, networkStatusUiState.condition, profileState.profiles) {
+    LaunchedEffect(gateScreen, authState) {
+        if (!ownsAppRuntime) return@LaunchedEffect
+        if (
+            authState is AuthState.Unauthenticated &&
+            AuthRepository.hasPersistedSession()
+        ) {
+            AuthRepository.refreshCurrentSession()
+        }
+    }
+
+    LaunchedEffect(gateScreen, authState) {
+        if (!ownsAppRuntime) return@LaunchedEffect
+        if (
+            gateScreen == AppGateScreen.Auth.name &&
+            authState is AuthState.Authenticated
+        ) {
+            val authenticatedState = authState as AuthState.Authenticated
+            ProfileRepository.ensureLoaded(authenticatedState.userId)
+            ProfileRepository.pullProfiles()
+            enterProfileGate(ProfileRepository.state.value.profiles, syncOnEnter = true)
+        }
+    }
+
+    LaunchedEffect(authState, gateScreen, networkStatusUiState.condition, profileState.profiles) {
         val cachedProfiles = profileState.profiles
         val hasCachedProfileAccess =
             cachedProfiles.isNotEmpty() &&
@@ -484,7 +507,21 @@ internal fun AppGate(
                     }
                 }
                 AppGateScreen.Auth.name -> {
-                    AuthScreen(modifier = Modifier.fillMaxSize())
+                    AuthScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        onAuthenticated = {
+                            gateScope.launch {
+                                val authenticatedState = authState as? AuthState.Authenticated
+                                    ?: return@launch
+                                ProfileRepository.ensureLoaded(authenticatedState.userId)
+                                ProfileRepository.pullProfiles()
+                                enterProfileGate(
+                                    ProfileRepository.state.value.profiles,
+                                    syncOnEnter = true,
+                                )
+                            }
+                        },
+                    )
                 }
                 AppGateScreen.ProfileSelection.name -> {
                     Box(

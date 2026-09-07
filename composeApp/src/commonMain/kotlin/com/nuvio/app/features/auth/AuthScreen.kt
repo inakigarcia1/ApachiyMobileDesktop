@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.auth.DeviceLinkAuthRepository
 import com.nuvio.app.core.auth.DeviceLinkAuthState
 import com.nuvio.app.core.auth.sanitizeAuthCredential
@@ -186,6 +187,7 @@ private fun largeAuthFormMetrics(scale: Float): AuthFormMetrics = LargeAuthFormM
 @Composable
 fun AuthScreen(
     modifier: Modifier = Modifier,
+    onAuthenticated: () -> Unit = {},
 ) {
     val authError by AuthRepository.error.collectAsStateWithLifecycle()
     val deviceLinkAuthState by DeviceLinkAuthRepository.state.collectAsStateWithLifecycle()
@@ -204,6 +206,12 @@ fun AuthScreen(
     val backendUnavailableMessage = stringResource(Res.string.account_error_service_unavailable)
     val connectionTimeoutMessage = stringResource(Res.string.account_error_connection_timeout)
 
+    LaunchedEffect(Unit) {
+        if (AuthRepository.state.value is AuthState.Authenticated) {
+            onAuthenticated()
+        }
+    }
+
     fun submitAuth() {
         val trimmedEmail = sanitizeAuthCredential(email)
         val configuration = ServerConfigurationRepository.active.value
@@ -219,14 +227,25 @@ fun AuthScreen(
                 AuthRepository.setError(passwordTooShortMessage)
             }
             else -> {
+                val alreadyAuthenticated = AuthRepository.state.value is AuthState.Authenticated
                 DeviceLinkAuthRepository.cancel()
                 isLoading = true
                 focusManager.clearFocus(force = true)
                 scope.launch {
                     try {
-                        withTimeout(25_000) {
-                            if (isSignUp) AuthRepository.signUpWithEmail(trimmedEmail, password)
-                            else AuthRepository.signInWithEmail(trimmedEmail, password)
+                        if (alreadyAuthenticated && !isSignUp) {
+                            onAuthenticated()
+                        } else {
+                            withTimeout(25_000) {
+                                if (isSignUp) {
+                                    AuthRepository.signUpWithEmail(trimmedEmail, password)
+                                } else {
+                                    AuthRepository.signInWithEmail(trimmedEmail, password)
+                                }
+                            }
+                            if (AuthRepository.state.value is AuthState.Authenticated) {
+                                onAuthenticated()
+                            }
                         }
                     } catch (_: TimeoutCancellationException) {
                         AuthRepository.setError(connectionTimeoutMessage)

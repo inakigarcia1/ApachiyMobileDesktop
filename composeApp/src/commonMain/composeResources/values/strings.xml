@@ -1528,6 +1528,7 @@
     <string name="home_continue_watching_hours_minutes_left">%1$dh %2$dm left</string>
     <string name="home_continue_watching_minutes_left">%1$dm left</string>
     <string name="home_empty_no_active_addons_message">Manage your account at apachiy.org/dashboard.</string>
+    <string name="home_empty_no_active_addons_title">Error loading catalog</string>
     <string name="home_empty_no_rows_message">Installed addons do not currently expose board-compatible catalogs without required extras.</string>
     <string name="home_empty_no_rows_title">No home rows available</string>
     <string name="home_view_details">View Details</string>

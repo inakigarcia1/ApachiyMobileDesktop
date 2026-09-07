@@ -26,6 +26,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
+import com.nuvio.app.isDesktop
+import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.core.build.AppVersionPolicy
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_about_based_on_version_format
@@ -92,6 +95,7 @@ internal fun LazyListScope.settingsRootContent(
     showAboutSection: Boolean = true,
     showAdvancedSection: Boolean = true,
     showSupportersContributorsPage: Boolean = true,
+    showContentDiscoveryEntry: Boolean = ApachiyProductSettings.operatorSettingsVisible,
 ) {
     if (showAccountSection) {
         item {
@@ -144,15 +148,17 @@ internal fun LazyListScope.settingsRootContent(
                         onClick = onAppearanceClick,
                     )
                     SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_content_discovery),
-                        description = stringResource(Res.string.compose_settings_root_content_discovery_description),
-                        icon = Icons.Rounded.Extension,
-                        isTablet = isTablet,
-                        onClick = onContentDiscoveryClick,
-                    )
-                    if (showDownloadsEntry) {
+                    if (showContentDiscoveryEntry) {
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_content_discovery),
+                            description = stringResource(Res.string.compose_settings_root_content_discovery_description),
+                            icon = Icons.Rounded.Extension,
+                            isTablet = isTablet,
+                            onClick = onContentDiscoveryClick,
+                        )
                         SettingsGroupDivider(isTablet = isTablet)
+                    }
+                    if (showDownloadsEntry) {
                         SettingsNavigationRow(
                             title = stringResource(Res.string.compose_settings_root_downloads_title),
                             description = stringResource(Res.string.compose_settings_root_downloads_description),
@@ -272,22 +278,37 @@ internal fun LazyListScope.settingsRootContent(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = if (isTablet) 20.dp else 16.dp),
         ) {
-            if (showAboutSection) {
-                MemberBrandWordmark(
-                    height = if (isTablet) 30.dp else 26.dp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-                androidx.compose.foundation.layout.Spacer(
-                    modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),
-                )
+            when {
+                isDesktop -> {
+                    AppBrandWordmark(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .height(if (isTablet) 30.dp else 26.dp),
+                    )
+                    androidx.compose.foundation.layout.Spacer(
+                        modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),
+                    )
+                }
+                showAboutSection -> {
+                    MemberBrandWordmark(
+                        height = if (isTablet) 30.dp else 26.dp,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                    androidx.compose.foundation.layout.Spacer(
+                        modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),
+                    )
+                    Text(
+                        text = stringResource(Res.string.compose_about_made_with),
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    androidx.compose.foundation.layout.Spacer(
+                        modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),
+                    )
+                }
             }
-            Text(
-                text = stringResource(Res.string.compose_about_made_with),
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
             Text(
                 text = stringResource(
                     Res.string.compose_about_version_format,
