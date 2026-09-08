@@ -83,6 +83,7 @@ import com.nuvio.app.core.auth.sanitizeAuthCredential
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.features.settings.AppBrandWordmark
+import com.nuvio.app.isDesktop
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.PI
@@ -808,23 +809,25 @@ private fun AuthForm(
             onToggleAuthMode = onToggleAuthMode,
         )
 
-        Spacer(modifier = Modifier.height(metrics.dividerTop))
+        if (!isDesktop) {
+            Spacer(modifier = Modifier.height(metrics.dividerTop))
 
-        AuthDivider(scale = scale)
+            AuthDivider(scale = scale)
 
-        Spacer(modifier = Modifier.height(metrics.secondaryTop))
+            Spacer(modifier = Modifier.height(metrics.secondaryTop))
 
-        if (!isSignUp && deviceLinkEnabled) {
-            DeviceLinkAuthSection(
-                state = deviceLinkAuthState,
-                enabled = !isLoading,
-                height = metrics.secondaryHeight,
-                scale = scale,
-                onStart = onStartDeviceLink,
-                onCancel = onCancelDeviceLink,
-            )
+            if (!isSignUp && deviceLinkEnabled) {
+                DeviceLinkAuthSection(
+                    state = deviceLinkAuthState,
+                    enabled = !isLoading,
+                    height = metrics.secondaryHeight,
+                    scale = scale,
+                    onStart = onStartDeviceLink,
+                    onCancel = onCancelDeviceLink,
+                )
 
-            Spacer(modifier = Modifier.height(14.dp * scale))
+                Spacer(modifier = Modifier.height(14.dp * scale))
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))

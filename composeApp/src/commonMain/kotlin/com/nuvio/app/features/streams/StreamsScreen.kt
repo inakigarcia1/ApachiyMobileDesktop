@@ -1031,7 +1031,7 @@ internal fun StreamList(
                             showHeader = uiState.selectedFilter == null,
                             debridEnabled = debridEnabled,
                             appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
-                            showFileSizeBadges = streamBadgeSettings.showFileSizeBadges,
+                            showFileSizeBadges = streamBadgeSettings.showFileSizeBadges && !isDesktop,
                             showAddonLogo = streamBadgeSettings.showAddonLogo,
                             badgePlacement = streamBadgeSettings.badgePlacement,
                             torrentNotSupportedText = torrentNotSupportedText,
