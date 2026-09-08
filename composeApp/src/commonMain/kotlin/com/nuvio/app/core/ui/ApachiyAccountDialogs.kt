@@ -35,7 +35,7 @@ import nuvio.composeapp.generated.resources.subscription_inactive_title
 import org.jetbrains.compose.resources.stringResource
 
 private const val DEVICES_DASHBOARD_URL = "https://apachiy.org/dashboard/devices"
-private const val ACCOUNT_DASHBOARD_URL = "https://apachiy.org/dashboard"
+private const val SUBSCRIPTION_DASHBOARD_URL = "https://apachiy.org/dashboard/subscription"
 
 @Composable
 fun ApachiyAccountLimitOverlays() {
@@ -93,7 +93,7 @@ fun InactiveSubscriptionDialog(onDismiss: () -> Unit) {
         message = stringResource(Res.string.subscription_inactive_message),
         primaryLabel = stringResource(Res.string.subscription_inactive_manage),
         onPrimary = {
-            runCatching { uriHandler.openUri(ACCOUNT_DASHBOARD_URL) }
+            runCatching { uriHandler.openUri(SUBSCRIPTION_DASHBOARD_URL) }
             onDismiss()
         },
         onDismiss = onDismiss,

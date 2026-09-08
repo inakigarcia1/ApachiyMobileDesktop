@@ -399,6 +399,10 @@ internal fun StreamDestination(
             StreamsRepository.skipAutoPlayStream(selectedStream)
             return@LaunchedEffect
         }
+        if (isDesktop && !allowPlaybackOrNotify()) {
+            StreamsRepository.consumeAutoPlay()
+            return@LaunchedEffect
+        }
         autoPlayHandled = true
         if (playerSettings.streamReuseLastLinkEnabled) {
             val cacheKey = StreamLinkCacheRepository.contentKey(
@@ -480,7 +484,23 @@ internal fun StreamDestination(
         resolvedResumeProgressFraction: Float?,
         forceExternal: Boolean,
         forceInternal: Boolean,
+        skipSubscriptionGate: Boolean = false,
     ) {
+        if (!skipSubscriptionGate && isDesktop) {
+            streamRouteScope.launch {
+                if (!allowPlaybackOrNotify()) return@launch
+                openSelectedStream(
+                    stream = stream,
+                    resolvedResumePositionMs = resolvedResumePositionMs,
+                    resolvedResumeProgressFraction = resolvedResumeProgressFraction,
+                    forceExternal = forceExternal,
+                    forceInternal = forceInternal,
+                    skipSubscriptionGate = true,
+                )
+            }
+            return
+        }
+
         if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
             if (resolvingDebridStream) return
             streamRouteScope.launch {
@@ -498,6 +518,7 @@ internal fun StreamDestination(
                         resolvedResumeProgressFraction = resolvedResumeProgressFraction,
                         forceExternal = forceExternal,
                         forceInternal = forceInternal,
+                        skipSubscriptionGate = skipSubscriptionGate,
                     )
                     else -> {
                         resolved.toastMessage()?.let { NuvioToastController.show(it) }

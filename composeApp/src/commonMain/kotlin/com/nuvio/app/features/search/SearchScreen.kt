@@ -17,7 +17,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.network.NetworkCondition
@@ -122,6 +126,20 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var lastRequestedQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var observedOfflineState by remember { mutableStateOf(false) }
+
+    fun submitSearch(searchQuery: String = query) {
+        val normalizedQuery = searchQuery.trim()
+        if (normalizedQuery.isBlank()) {
+            lastRequestedQuery = null
+            SearchRepository.clear()
+            return
+        }
+        lastRequestedQuery = normalizedQuery
+        SearchRepository.search(
+            query = normalizedQuery,
+            addons = addonsUiState.addons,
+        )
+    }
     val discoverInFocus by remember(query, listState) {
         derivedStateOf {
             query.isBlank() && listState.firstVisibleItemIndex > 0
@@ -162,6 +180,13 @@ fun SearchScreen(
 
     LaunchedEffect(query, addonRefreshKey, homeCatalogSettingsUiState.hideUnreleasedContent) {
         val normalizedQuery = query.trim()
+        if (isDesktop) {
+            if (normalizedQuery.isBlank()) {
+                lastRequestedQuery = null
+                SearchRepository.clear()
+            }
+            return@LaunchedEffect
+        }
         if (normalizedQuery.isBlank()) {
             lastRequestedQuery = null
             SearchRepository.clear()
@@ -216,7 +241,7 @@ fun SearchScreen(
                         addons = addonsUiState.addons,
                         forceRefresh = true,
                     )
-                } else {
+                } else if (!isDesktop || lastRequestedQuery == normalizedQuery) {
                     SearchRepository.search(
                         query = normalizedQuery,
                         addons = addonsUiState.addons,
@@ -283,18 +308,53 @@ fun SearchScreen(
                             onValueChange = { query = it },
                             placeholder = stringResource(Res.string.compose_search_placeholder),
                             modifier = Modifier.focusRequester(focusRequester),
-                            trailingContent = if (query.isNotBlank()) {
-                                {
-                                    IconButton(onClick = { query = "" }) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Close,
-                                            contentDescription = stringResource(Res.string.compose_search_clear),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                            keyboardOptions = if (isDesktop) {
+                                KeyboardOptions(imeAction = ImeAction.Search)
+                            } else {
+                                KeyboardOptions.Default
+                            },
+                            keyboardActions = if (isDesktop) {
+                                KeyboardActions(onSearch = { submitSearch() })
+                            } else {
+                                KeyboardActions.Default
+                            },
+                            trailingContent = when {
+                                isDesktop -> {
+                                    {
+                                        Row {
+                                            IconButton(onClick = { submitSearch() }) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Search,
+                                                    contentDescription = stringResource(Res.string.compose_nav_search),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                            if (query.isNotBlank()) {
+                                                IconButton(onClick = { query = "" }) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Close,
+                                                        contentDescription = stringResource(Res.string.compose_search_clear),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            } else {
-                                null
+
+                                query.isNotBlank() -> {
+                                    {
+                                        IconButton(onClick = { query = "" }) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = stringResource(Res.string.compose_search_clear),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                else -> null
                             },
                         )
                     }
@@ -308,7 +368,12 @@ fun SearchScreen(
                 item(key = "recent_searches") {
                     SearchRecentSection(
                         recentSearches = recentSearches,
-                        onSearchPress = { recentQuery -> query = recentQuery },
+                        onSearchPress = { recentQuery ->
+                            query = recentQuery
+                            if (isDesktop) {
+                                submitSearch(recentQuery)
+                            }
+                        },
                         onRemoveSearch = SearchHistoryRepository::removeSearch,
                     )
                 }
@@ -334,8 +399,15 @@ fun SearchScreen(
                 )
             } else {
                 val normalizedQuery = query.trim()
-                val isWaitingForSearch = normalizedQuery.isNotBlank() && lastRequestedQuery != normalizedQuery
+                val isWaitingForSearch = !isDesktop &&
+                    normalizedQuery.isNotBlank() &&
+                    lastRequestedQuery != normalizedQuery
+                val isDesktopPendingSearch = isDesktop &&
+                    normalizedQuery.isNotBlank() &&
+                    lastRequestedQuery != normalizedQuery
                 when {
+                    isDesktopPendingSearch -> Unit
+
                     isWaitingForSearch -> {
                         items(2) {
                             HomeSkeletonRow(
@@ -361,11 +433,15 @@ fun SearchScreen(
                                 onRetry = {
                                     if (normalizedQuery.isNotBlank()) {
                                         NetworkStatusRepository.requestRefresh(force = true)
-                                        SearchRepository.search(
-                                            query = normalizedQuery,
-                                            addons = addonsUiState.addons,
-                                            forceRefresh = true,
-                                        )
+                                        if (isDesktop) {
+                                            submitSearch(normalizedQuery)
+                                        } else {
+                                            SearchRepository.search(
+                                                query = normalizedQuery,
+                                                addons = addonsUiState.addons,
+                                                forceRefresh = true,
+                                            )
+                                        }
                                     }
                                 },
                                 modifier = Modifier.padding(horizontal = homeSectionPadding),

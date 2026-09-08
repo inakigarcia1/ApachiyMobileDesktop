@@ -270,10 +270,12 @@ internal fun TabletStreamsLayout(
                         onRefresh = onRefresh,
                     )
 
-                    ActiveScrapersStatusBlock(
-                        groups = uiState.groups,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
+                    if (!isDesktop) {
+                        ActiveScrapersStatusBlock(
+                            groups = uiState.groups,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
 
                     StreamList(
                         uiState = uiState,

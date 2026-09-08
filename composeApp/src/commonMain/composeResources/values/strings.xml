@@ -1630,6 +1630,7 @@
     <string name="streams_no_direct_link">No direct stream link available</string>
     <string name="streams_no_metadata">No metadata available</string>
     <string name="streams_refresh">Refresh streams</string>
+    <string name="streams_reload">Reload</string>
     <string name="streams_resume_from_percent">Resume from %1$d%</string>
     <string name="streams_resume_from_time">Resume from %1$s</string>
     <string name="streams_size">SIZE %1$s</string>
@@ -2315,7 +2316,7 @@
     <string name="device_limit_message">You have reached the maximum number of devices allowed for your account. To manage them, visit apachiy.org/dashboard/devices.</string>
     <string name="device_limit_manage_devices">Manage devices</string>
     <string name="subscription_inactive_title">No active subscription</string>
-    <string name="subscription_inactive_message">You don’t have an active subscription. Manage your plan at apachiy.org/dashboard.</string>
+    <string name="subscription_inactive_message">You don’t have an active subscription. Manage your plan at apachiy.org/dashboard/subscription.</string>
     <string name="subscription_inactive_manage">Manage subscription</string>
     <string name="player_loading_generic">Cargando…</string>
 </resources>

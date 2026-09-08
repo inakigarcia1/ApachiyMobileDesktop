@@ -95,7 +95,8 @@ internal fun LazyListScope.settingsRootContent(
     showAboutSection: Boolean = true,
     showAdvancedSection: Boolean = true,
     showSupportersContributorsPage: Boolean = true,
-    showContentDiscoveryEntry: Boolean = ApachiyProductSettings.operatorSettingsVisible,
+    showContentDiscoveryEntry: Boolean = !isDesktop || ApachiyProductSettings.operatorSettingsVisible,
+    showIntegrationsEntry: Boolean = !isDesktop || ApachiyProductSettings.operatorSettingsVisible,
 ) {
     if (showAccountSection) {
         item {
@@ -175,14 +176,16 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = onPlaybackClick,
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_integrations),
-                        description = stringResource(Res.string.compose_settings_root_integrations_description),
-                        icon = Icons.Rounded.Link,
-                        isTablet = isTablet,
-                        onClick = onIntegrationsClick,
-                    )
+                    if (showIntegrationsEntry) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_integrations),
+                            description = stringResource(Res.string.compose_settings_root_integrations_description),
+                            icon = Icons.Rounded.Link,
+                            isTablet = isTablet,
+                            onClick = onIntegrationsClick,
+                        )
+                    }
                     if (showNotificationsEntry) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(
@@ -283,7 +286,7 @@ internal fun LazyListScope.settingsRootContent(
                     AppBrandWordmark(
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
-                            .height(if (isTablet) 30.dp else 26.dp),
+                            .height(if (isTablet) 48.dp else 42.dp),
                     )
                     androidx.compose.foundation.layout.Spacer(
                         modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),
@@ -320,17 +323,19 @@ internal fun LazyListScope.settingsRootContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            AppVersionPolicy.basedOnVersionName?.let { basedOnVersionName ->
-                Text(
-                    text = stringResource(
-                        Res.string.compose_about_based_on_version_format,
-                        basedOnVersionName,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
+            if (!isDesktop) {
+                AppVersionPolicy.basedOnVersionName?.let { basedOnVersionName ->
+                    Text(
+                        text = stringResource(
+                            Res.string.compose_about_based_on_version_format,
+                            basedOnVersionName,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
     }

@@ -1340,6 +1340,7 @@
     <string name="streams_no_direct_link">No hay enlace directo del stream disponible</string>
     <string name="streams_no_metadata">No hay metadatos disponibles</string>
     <string name="streams_refresh">Actualizar streams</string>
+    <string name="streams_reload">Recargar</string>
     <string name="streams_resume_from_percent">Reanudar desde %1$d%</string>
     <string name="streams_resume_from_time">Reanudar desde %1$s</string>
     <string name="streams_size">TAMAÑO %1$s</string>
@@ -1967,7 +1968,7 @@
     <string name="device_limit_message">Ha alcanzado la cantidad máxima de dispositivos permitidos para su cuenta. Para gestionarlos, visite apachiy.org/dashboard/devices.</string>
     <string name="device_limit_manage_devices">Gestionar dispositivos</string>
     <string name="subscription_inactive_title">Sin suscripción activa</string>
-    <string name="subscription_inactive_message">No tiene una suscripción activa. Gestione su plan en apachiy.org/dashboard.</string>
+    <string name="subscription_inactive_message">No tiene una suscripción activa. Gestione su plan en apachiy.org/dashboard/subscription.</string>
     <string name="subscription_inactive_manage">Gestionar suscripción</string>
     <string name="addon_denied_host">Este addon no está permitido.</string>
     <string name="player_error_try_another_option">Ocurrió un error al reproducir. Por favor, pruebe con otra opción</string>

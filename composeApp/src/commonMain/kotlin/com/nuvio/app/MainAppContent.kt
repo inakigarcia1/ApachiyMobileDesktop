@@ -949,25 +949,63 @@ internal fun MainAppContent(
             manualSelection: Boolean,
             startFromBeginning: Boolean,
         ) {
-            val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L)
-            val targetResumeProgressFraction = if (startFromBeginning) null else resumeProgressFraction
+            fun proceed() {
+                val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L)
+                val targetResumeProgressFraction = if (startFromBeginning) null else resumeProgressFraction
 
-            if (!manualSelection && AppFeaturePolicy.downloadsEnabled) {
-                val downloadedItem = DownloadsRepository.findPlayableDownload(
-                    parentMetaId = parentMetaId,
-                    seasonNumber = seasonNumber,
-                    episodeNumber = episodeNumber,
-                    videoId = videoId,
-                )
-                val localSourceUrl = downloadedItem?.let(DownloadsRepository::playableLocalFileUri)
-                if (!localSourceUrl.isNullOrBlank()) {
-                    val playerLaunch = PlayerLaunch(
+                if (!manualSelection && AppFeaturePolicy.downloadsEnabled) {
+                    val downloadedItem = DownloadsRepository.findPlayableDownload(
+                        parentMetaId = parentMetaId,
+                        seasonNumber = seasonNumber,
+                        episodeNumber = episodeNumber,
+                        videoId = videoId,
+                    )
+                    val localSourceUrl = downloadedItem?.let(DownloadsRepository::playableLocalFileUri)
+                    if (!localSourceUrl.isNullOrBlank()) {
+                        val playerLaunch = PlayerLaunch(
+                            profileId = activePlaybackProfileId,
+                            title = title,
+                            sourceUrl = localSourceUrl,
+                            sourceHeaders = emptyMap(),
+                            sourceResponseHeaders = emptyMap(),
+                            externalSubtitles = emptyList(),
+                            logo = logo,
+                            poster = poster,
+                            background = background,
+                            seasonNumber = seasonNumber,
+                            episodeNumber = episodeNumber,
+                            episodeTitle = episodeTitle,
+                            episodeThumbnail = episodeThumbnail,
+                            streamTitle = downloadedItem.streamTitle.ifBlank { title },
+                            streamSubtitle = downloadedItem.streamSubtitle,
+                            pauseDescription = pauseDescription,
+                            providerName = downloadedItem.providerName.ifBlank { downloadedProviderLabel },
+                            providerAddonId = downloadedItem.providerAddonId,
+                            contentType = type,
+                            videoId = videoId,
+                            parentMetaId = parentMetaId,
+                            parentMetaType = parentMetaType,
+                            initialPositionMs = targetResumePositionMs,
+                            initialProgressFraction = targetResumeProgressFraction,
+                        )
+                        if (externalPlayerSupported && playerSettingsUiState.externalPlayerEnabled) {
+                            coroutineScope.launch { openExternalPlayback(playerLaunch) }
+                            return
+                        }
+                        val launchId = PlayerLaunchStore.put(playerLaunch)
+                        navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
+                        return
+                    }
+                }
+
+                val streamLaunchId = StreamLaunchStore.put(
+                    StreamLaunch(
                         profileId = activePlaybackProfileId,
+                        type = type,
+                        videoId = videoId,
+                        parentMetaId = parentMetaId,
+                        parentMetaType = parentMetaType,
                         title = title,
-                        sourceUrl = localSourceUrl,
-                        sourceHeaders = emptyMap(),
-                        sourceResponseHeaders = emptyMap(),
-                        externalSubtitles = emptyList(),
                         logo = logo,
                         poster = poster,
                         background = background,
@@ -975,53 +1013,26 @@ internal fun MainAppContent(
                         episodeNumber = episodeNumber,
                         episodeTitle = episodeTitle,
                         episodeThumbnail = episodeThumbnail,
-                        streamTitle = downloadedItem.streamTitle.ifBlank { title },
-                        streamSubtitle = downloadedItem.streamSubtitle,
                         pauseDescription = pauseDescription,
-                        providerName = downloadedItem.providerName.ifBlank { downloadedProviderLabel },
-                        providerAddonId = downloadedItem.providerAddonId,
-                        contentType = type,
-                        videoId = videoId,
-                        parentMetaId = parentMetaId,
-                        parentMetaType = parentMetaType,
-                        initialPositionMs = targetResumePositionMs,
-                        initialProgressFraction = targetResumeProgressFraction,
-                    )
-                    if (externalPlayerSupported && playerSettingsUiState.externalPlayerEnabled) {
-                        coroutineScope.launch { openExternalPlayback(playerLaunch) }
-                        return
-                    }
-                    val launchId = PlayerLaunchStore.put(playerLaunch)
-                    navController.navigate(PlayerRoute(launchId = launchId, title = playerLaunch.title))
-                    return
-                }
+                        resumePositionMs = if (startFromBeginning) 0L else resumePositionMs,
+                        resumeProgressFraction = targetResumeProgressFraction,
+                        manualSelection = manualSelection,
+                        startFromBeginning = startFromBeginning,
+                    ),
+                )
+                navController.navigate(
+                    StreamRoute(launchId = streamLaunchId, title = title),
+                )
             }
 
-            val streamLaunchId = StreamLaunchStore.put(
-                StreamLaunch(
-                    profileId = activePlaybackProfileId,
-                    type = type,
-                    videoId = videoId,
-                    parentMetaId = parentMetaId,
-                    parentMetaType = parentMetaType,
-                    title = title,
-                    logo = logo,
-                    poster = poster,
-                    background = background,
-                    seasonNumber = seasonNumber,
-                    episodeNumber = episodeNumber,
-                    episodeTitle = episodeTitle,
-                    episodeThumbnail = episodeThumbnail,
-                    pauseDescription = pauseDescription,
-                    resumePositionMs = if (startFromBeginning) 0L else resumePositionMs,
-                    resumeProgressFraction = targetResumeProgressFraction,
-                    manualSelection = manualSelection,
-                    startFromBeginning = startFromBeginning,
-                ),
-            )
-            navController.navigate(
-                StreamRoute(launchId = streamLaunchId, title = title),
-            )
+            if (isDesktop) {
+                coroutineScope.launch {
+                    if (!allowPlaybackOrNotify()) return@launch
+                    proceed()
+                }
+            } else {
+                proceed()
+            }
         }
 
         val onPlay: ContentPlayAction =

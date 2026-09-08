@@ -811,35 +811,52 @@ internal fun ProviderFilterRow(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val reloadLabel = stringResource(Res.string.streams_reload)
     val addonGroups = groups.filter { it.streams.isNotEmpty() || it.isLoading }
     val scrollState = rememberScrollState()
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .nuvioDesktopDragScroll(scrollState)
-            .horizontalScroll(scrollState)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .then(
+                if (isDesktop) {
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                } else {
+                    Modifier
+                        .nuvioDesktopDragScroll(scrollState)
+                        .horizontalScroll(scrollState)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                },
+            ),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        FilterChip(
-            icon = Icons.Rounded.Refresh,
-            contentDescription = stringResource(Res.string.streams_refresh),
-            isSelected = false,
-            onClick = onRefresh,
-        )
-        // "All" chip
-        FilterChip(
-            label = stringResource(Res.string.collections_tab_all),
-            isSelected = selectedFilter == null,
-            onClick = { onFilterSelected(null) },
-        )
-        addonGroups.forEach { group ->
+        if (isDesktop) {
             FilterChip(
-                label = group.addonName,
-                isSelected = selectedFilter == group.addonId,
-                onClick = { onFilterSelected(group.addonId) },
+                label = reloadLabel,
+                icon = Icons.Rounded.Refresh,
+                contentDescription = reloadLabel,
+                isSelected = false,
+                onClick = onRefresh,
             )
+        } else {
+            FilterChip(
+                icon = Icons.Rounded.Refresh,
+                contentDescription = stringResource(Res.string.streams_refresh),
+                isSelected = false,
+                onClick = onRefresh,
+            )
+            FilterChip(
+                label = stringResource(Res.string.collections_tab_all),
+                isSelected = selectedFilter == null,
+                onClick = { onFilterSelected(null) },
+            )
+            addonGroups.forEach { group ->
+                FilterChip(
+                    label = group.addonName,
+                    isSelected = selectedFilter == group.addonId,
+                    onClick = { onFilterSelected(group.addonId) },
+                )
+            }
         }
     }
 }
