@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
-import com.nuvio.app.core.i18n.localizedByteUnit
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.PresenceSnapshot
 import com.nuvio.app.core.ui.nuvio
@@ -553,7 +552,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             showP2pRebufferStats = showP2pRebufferStats,
             p2pRebufferMessage = p2pRebufferMessage,
             p2pRebufferProgress = p2pRebufferProgress,
-            suppressOpeningOverlay = isDesktop && playerSurfaceSourceUrl != null,
+            suppressOpeningOverlay = false,
         )
         RenderPlayerModals(displayedPositionMs = displayedPositionMs)
     }
@@ -1276,7 +1275,6 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamFilters(
 private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerControlSourceItem> {
     val canResolveDebrid = DebridSettingsRepository.uiState.value.canResolvePlayableLinks
     val streamBadgeState = StreamBadgeSettingsRepository.uiState.value
-    val showFileSizeBadges = streamBadgeState.showFileSizeBadges
     val showAddonLogo = streamBadgeState.showAddonLogo
     val badgePlacement = streamBadgeState.badgePlacement.name
     return sourceStreamsState.groups.flatMap { group ->
@@ -1301,7 +1299,6 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
                     borderColor = it.borderColor,
                 )
             },
-            formattedSize = if (showFileSizeBadges) formatStreamVideoSize(stream.behaviorHints.videoSize) else "",
             badgePlacement = badgePlacement,
         )
     }
@@ -1311,7 +1308,6 @@ private fun PlayerScreenRuntime.buildPlayerControlSourceItems(): List<PlayerCont
 private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<PlayerControlSourceItem> {
     val canResolveDebrid = DebridSettingsRepository.uiState.value.canResolvePlayableLinks
     val streamBadgeState = StreamBadgeSettingsRepository.uiState.value
-    val showFileSizeBadges = streamBadgeState.showFileSizeBadges
     val showAddonLogo = streamBadgeState.showAddonLogo
     val badgePlacement = streamBadgeState.badgePlacement.name
     return episodeStreamsRepoState.groups.flatMap { group ->
@@ -1336,24 +1332,9 @@ private fun PlayerScreenRuntime.buildPlayerControlEpisodeStreamItems(): List<Pla
                     borderColor = it.borderColor,
                 )
             },
-            formattedSize = if (showFileSizeBadges) formatStreamVideoSize(stream.behaviorHints.videoSize) else "",
             badgePlacement = badgePlacement,
         )
     }
-}
-
-@Composable
-private fun formatStreamVideoSize(bytes: Long?): String {
-    if (bytes == null || bytes <= 0L) return ""
-    val gib = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-    val sizeLabel = if (gib >= 1.0) {
-        val roundedGiB = kotlin.math.round(gib * 10.0) / 10.0
-        "$roundedGiB ${localizedByteUnit("GB")}"
-    } else {
-        val mib = bytes.toDouble() / (1024.0 * 1024.0)
-        "${kotlin.math.round(mib).toInt()} ${localizedByteUnit("MB")}"
-    }
-    return stringResource(Res.string.streams_size, sizeLabel)
 }
 
 private fun PlayerScreenRuntime.isCurrentPlayerControlStream(stream: StreamItem): Boolean {

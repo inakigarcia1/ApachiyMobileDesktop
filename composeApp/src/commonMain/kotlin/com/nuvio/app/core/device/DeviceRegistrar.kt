@@ -57,6 +57,7 @@ object DeviceRegistrar {
                 .distinctUntilChanged()
                 .collect { isAuthed ->
                     if (isAuthed) {
+                        mutex.withLock { lastAttemptMark = null }
                         _initialRegistrationCompleted.value = false
                         registerNow()
                     } else {
@@ -87,6 +88,7 @@ object DeviceRegistrar {
         mutex.withLock {
             val last = lastAttemptMark
             if (last != null && last.elapsedNow().inWholeMilliseconds < MIN_RETRY_GAP_MS) {
+                _initialRegistrationCompleted.value = true
                 return
             }
             lastAttemptMark = TimeSource.Monotonic.markNow()

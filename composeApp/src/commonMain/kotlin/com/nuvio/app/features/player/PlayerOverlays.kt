@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import com.nuvio.app.core.ui.NuvioBackButton
+import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.core.ui.nuvioTypeScale
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_player_close
@@ -236,9 +237,14 @@ internal fun OpeningOverlay(
                             scaleY = contentScale
                         },
                 )
-            } else {
+            }
+
+            if (!progressActive) {
+                if (logoUrl != null && !logoLoadError || !title.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
                 NuvioLoadingIndicator(
-                    color = Color(0xFFE50914),
+                    color = MaterialTheme.nuvio.colors.accent,
                     modifier = Modifier.size(54.dp),
                 )
             }

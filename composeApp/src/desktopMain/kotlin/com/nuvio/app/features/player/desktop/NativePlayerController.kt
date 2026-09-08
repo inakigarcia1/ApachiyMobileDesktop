@@ -619,6 +619,8 @@ internal class NativePlayerController(
         NativePlayerBridge.setSpeed(current, next)
     }
 
+    fun hasAttachedPlayer(): Boolean = synchronized(lifecycleLock) { handle != 0L }
+
     fun snapshot(): PlayerPlaybackSnapshot {
         val current = handle
         if (current == 0L) return PlayerPlaybackSnapshot(isLoading = true)

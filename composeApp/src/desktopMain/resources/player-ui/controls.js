@@ -1899,6 +1899,7 @@ const renderOpeningOverlay = suppress => {
   const titleText = String(state.openingTitle || state.title || "").trim();
   const messageText = String(state.openingMessage || "").trim();
   const showHorizontalProgress = hasProgress && !logoUrl;
+  const showLogoProgress = Boolean(logoUrl && hasProgress);
 
   root.classList.toggle("opening-active", showOpening);
   openingOverlay.classList.toggle("visible", showOpening);
@@ -1908,12 +1909,12 @@ const renderOpeningOverlay = suppress => {
   openingBackButton.setAttribute("aria-label", state.closeLabel || "Close player");
   syncFullscreenButtons();
 
-  openingLogoSlot.hidden = !logoUrl;
+  openingLogoSlot.hidden = !showLogoProgress;
   openingLogoFillClip.style.width = `${(progress || 0) * 100}%`;
 
   openingTitle.textContent = titleText;
-  openingTitle.hidden = Boolean(logoUrl || !titleText);
-  openingSpinner.hidden = Boolean(logoUrl || titleText);
+  openingTitle.hidden = Boolean(showLogoProgress || !titleText);
+  openingSpinner.hidden = Boolean(showLogoProgress);
 
   openingMessage.textContent = messageText;
   openingStatus.hidden = !(messageText || showHorizontalProgress);

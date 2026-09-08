@@ -13,7 +13,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.nuvio.app.core.account.InactiveSubscriptionNotifier
+import com.nuvio.app.core.auth.DeviceLimitNotifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,6 +36,37 @@ import org.jetbrains.compose.resources.stringResource
 
 private const val DEVICES_DASHBOARD_URL = "https://apachiy.org/dashboard/devices"
 private const val ACCOUNT_DASHBOARD_URL = "https://apachiy.org/dashboard"
+
+@Composable
+fun ApachiyAccountLimitOverlays() {
+    var deviceLimitEventId by remember { mutableStateOf(0) }
+    var dismissedDeviceLimitEventId by remember { mutableStateOf(0) }
+    var inactiveSubscriptionEventId by remember { mutableStateOf(0) }
+    var dismissedInactiveSubscriptionEventId by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        DeviceLimitNotifier.events.collect {
+            deviceLimitEventId++
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        InactiveSubscriptionNotifier.events.collect {
+            inactiveSubscriptionEventId++
+        }
+    }
+
+    if (deviceLimitEventId > dismissedDeviceLimitEventId) {
+        DeviceLimitDialog(
+            onDismiss = { dismissedDeviceLimitEventId = deviceLimitEventId },
+        )
+    }
+    if (inactiveSubscriptionEventId > dismissedInactiveSubscriptionEventId) {
+        InactiveSubscriptionDialog(
+            onDismiss = { dismissedInactiveSubscriptionEventId = inactiveSubscriptionEventId },
+        )
+    }
+}
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)

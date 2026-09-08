@@ -88,8 +88,10 @@ import kotlin.math.cos
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.account_error_connection_timeout
 import nuvio.composeapp.generated.resources.account_error_invalid_email
@@ -236,14 +238,19 @@ fun AuthScreen(
                         if (alreadyAuthenticated && !isSignUp) {
                             onAuthenticated()
                         } else {
-                            withTimeout(25_000) {
+                            val result = withTimeout(25_000) {
                                 if (isSignUp) {
                                     AuthRepository.signUpWithEmail(trimmedEmail, password)
                                 } else {
                                     AuthRepository.signInWithEmail(trimmedEmail, password)
                                 }
                             }
-                            if (AuthRepository.state.value is AuthState.Authenticated) {
+                            if (result.isSuccess && AuthRepository.state.value !is AuthState.Authenticated) {
+                                withTimeoutOrNull(8_000) {
+                                    AuthRepository.state.first { it is AuthState.Authenticated }
+                                }
+                            }
+                            if (result.isSuccess && AuthRepository.state.value is AuthState.Authenticated) {
                                 onAuthenticated()
                             }
                         }

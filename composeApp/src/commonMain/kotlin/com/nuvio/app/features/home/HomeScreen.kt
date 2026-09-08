@@ -530,11 +530,11 @@ fun HomeScreen(
         buildHomeCatalogRefreshSignature(enabledAddons)
     }
 
-    LaunchedEffect(catalogRefreshKey, addonReconciliationComplete) {
+    LaunchedEffect(catalogRefreshKey, addonReconciliationComplete, activeProfileId) {
         if (catalogRefreshKey.isEmpty()) return@LaunchedEffect
         if (isAuthenticatedCloudUser && !addonReconciliationComplete) return@LaunchedEffect
         HomeCatalogSettingsRepository.syncCatalogs(enabledAddons)
-        HomeRepository.refresh(enabledAddons)
+        HomeRepository.refresh(enabledAddons, force = true)
     }
 
     LaunchedEffect(collections, enabledAddons) {

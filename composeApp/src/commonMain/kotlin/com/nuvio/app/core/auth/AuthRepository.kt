@@ -116,6 +116,7 @@ object AuthRepository {
             this.email = sanitizedEmail
             this.password = sanitizedPassword
         }
+        applyCurrentSessionToState()
         Unit
     }.onFailure { e ->
         if (e is CancellationException) throw e
@@ -133,6 +134,7 @@ object AuthRepository {
             this.email = sanitizedEmail
             this.password = sanitizedPassword
         }
+        applyCurrentSessionToState()
     }.onFailure { e ->
         if (e is CancellationException) throw e
         lastAuthKind = LastAuthKind.None
@@ -255,6 +257,18 @@ object AuthRepository {
 
     fun hasPersistedSession(): Boolean =
         !SupabaseProvider.client.auth.currentAccessTokenOrNull().isNullOrBlank()
+
+    private fun applyCurrentSessionToState() {
+        val session = SupabaseProvider.client.auth.currentSessionOrNull() ?: return
+        val user = session.user ?: return
+        val userId = user.id
+        if (userId.isBlank()) return
+        _state.value = AuthState.Authenticated(
+            userId = userId,
+            email = user.email,
+            isAnonymous = false,
+        )
+    }
 
     fun setError(message: String) {
         _error.value = message

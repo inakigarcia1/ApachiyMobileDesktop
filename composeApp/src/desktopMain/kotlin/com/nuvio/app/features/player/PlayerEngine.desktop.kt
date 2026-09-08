@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -230,12 +231,27 @@ private fun NativePlayerSurface(
         }
     }
 
+    var coverNativeWhileLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(sourceUrl) {
+        coverNativeWhileLoading = false
+    }
     LaunchedEffect(controller) {
         while (true) {
-            onSnapshot(controller.snapshot())
-            delay(500L)
+            val snapshot = controller.snapshot()
+            val nativeAttached = controller.hasAttachedPlayer()
+            val shouldCover = nativeAttached && snapshot.isLoading
+            val shouldReveal = nativeAttached && !snapshot.isLoading && snapshot.durationMs > 0L
+            if (shouldCover) {
+                coverNativeWhileLoading = true
+            } else if (shouldReveal) {
+                coverNativeWhileLoading = false
+            }
+            onSnapshot(snapshot)
+            delay(if (snapshot.isLoading || coverNativeWhileLoading) 50L else 500L)
         }
     }
+
+    val showFullNativeSurface = hostFirstPaintComplete.value && !coverNativeWhileLoading
 
     Box(
         modifier = modifier
@@ -247,7 +263,7 @@ private fun NativePlayerSurface(
                 factory = {
                     host
                 },
-                modifier = if (hostFirstPaintComplete.value) {
+                modifier = if (showFullNativeSurface) {
                     Modifier.fillMaxSize()
                 } else {
                     Modifier

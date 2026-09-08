@@ -1422,7 +1422,7 @@ compose.desktop {
             )
             macOS {
                 bundleID = "com.apachiy.desktop"
-                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
+                iconFile.set(project.file("src/desktopMain/resources/icons/apachiy-app-icon-transparent.icns"))
                 infoPlist {
                     extraKeysRawXml = """
                         <key>CFBundleURLTypes</key>
@@ -1459,14 +1459,14 @@ compose.desktop {
                 }
             }
             windows {
-                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.ico"))
+                iconFile.set(project.file("src/desktopMain/resources/icons/apachiy-app-icon-transparent.ico"))
                 upgradeUuid = windowsMsiUpgradeUuid
                 shortcut = true
                 menu = true
                 menuGroup = "Apachiy"
             }
             linux {
-                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.png"))
+                iconFile.set(project.file("src/desktopMain/resources/icons/apachiy-app-icon-transparent.png"))
                 debMaintainer = "contact@apachiy.org"
                 shortcut = true
                 menuGroup = "Apachiy"

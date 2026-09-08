@@ -33,6 +33,7 @@ import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.sync.ProfileSettingsSync
 import com.nuvio.app.core.sync.SyncManager
+import com.nuvio.app.core.ui.ApachiyAccountLimitOverlays
 import com.nuvio.app.core.ui.NativeProfileSwitcherController
 import com.nuvio.app.core.ui.NativeTabBridge
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -116,27 +117,30 @@ internal fun AppGate(
     appGateController: AppGateController?,
 ) {
     if (bypassAppGate) {
-        MainAppContent(
-            initialTab = initialTab,
-            initialRoute = initialRoute,
-            useNativeNavigation = useNativeNavigation,
-            useNativeTabBar = useNativeTabBar,
-            useTabletFloatingTabBar = useTabletFloatingTabBar,
-            ownsAppRuntime = ownsAppRuntime,
-            showLaunchOverlay = appGateController == null,
-            onNavigate = onNavigate,
-            onGoBack = onGoBack,
-            onReplace = onReplace,
-            onActivate = onActivate,
-            onTabTitles = onTabTitles,
-            appGateController = appGateController,
-            onRootContentReady = appGateController?.let { controller ->
-                controller::reportMainContentReady
-            },
-            onSwitchProfile = appGateController?.let { controller ->
-                controller::requestProfileSelection
-            } ?: {},
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            MainAppContent(
+                initialTab = initialTab,
+                initialRoute = initialRoute,
+                useNativeNavigation = useNativeNavigation,
+                useNativeTabBar = useNativeTabBar,
+                useTabletFloatingTabBar = useTabletFloatingTabBar,
+                ownsAppRuntime = ownsAppRuntime,
+                showLaunchOverlay = appGateController == null,
+                onNavigate = onNavigate,
+                onGoBack = onGoBack,
+                onReplace = onReplace,
+                onActivate = onActivate,
+                onTabTitles = onTabTitles,
+                appGateController = appGateController,
+                onRootContentReady = appGateController?.let { controller ->
+                    controller::reportMainContentReady
+                },
+                onSwitchProfile = appGateController?.let { controller ->
+                    controller::requestProfileSelection
+                } ?: {},
+            )
+            ApachiyAccountLimitOverlays()
+        }
         return
     }
 
@@ -348,6 +352,7 @@ internal fun AppGate(
     LaunchedEffect(gateScreen, authState) {
         if (!ownsAppRuntime) return@LaunchedEffect
         if (
+            gateScreen != AppGateScreen.Auth.name &&
             authState is AuthState.Unauthenticated &&
             AuthRepository.hasPersistedSession()
         ) {
@@ -370,19 +375,18 @@ internal fun AppGate(
 
     LaunchedEffect(authState, gateScreen, networkStatusUiState.condition, profileState.profiles) {
         val cachedProfiles = profileState.profiles
+        val networkCondition = networkStatusUiState.condition
+        val isOfflineForCachedAccess =
+            networkCondition == NetworkCondition.NoInternet ||
+                networkCondition == NetworkCondition.ServersUnreachable
         val hasCachedProfileAccess =
             cachedProfiles.isNotEmpty() &&
                 authState !is AuthState.Authenticated
-        val allowCachedProfileAccess =
-            hasCachedProfileAccess &&
-                (
-                    networkStatusUiState.condition != NetworkCondition.Online ||
-                        gateScreen != AppGateScreen.Auth.name
-                )
+        val allowCachedProfileAccess = hasCachedProfileAccess && isOfflineForCachedAccess
 
         when (authState) {
             is AuthState.Loading -> {
-                if (hasCachedProfileAccess) {
+                if (allowCachedProfileAccess) {
                     enterProfileGate(cachedProfiles, syncOnEnter = false)
                 } else {
                     gateScreen = AppGateScreen.Loading.name
@@ -390,7 +394,12 @@ internal fun AppGate(
             }
             is AuthState.Unauthenticated -> {
                 if (allowCachedProfileAccess) {
-                    enterProfileGate(cachedProfiles, syncOnEnter = false)
+                    if (
+                        gateScreen == AppGateScreen.Loading.name ||
+                        gateScreen == AppGateScreen.Auth.name
+                    ) {
+                        enterProfileGate(cachedProfiles, syncOnEnter = false)
+                    }
                 } else {
                     ProfileRepository.clearInMemory()
                     profileSelectionLoading = false
@@ -511,7 +520,7 @@ internal fun AppGate(
                         modifier = Modifier.fillMaxSize(),
                         onAuthenticated = {
                             gateScope.launch {
-                                val authenticatedState = authState as? AuthState.Authenticated
+                                val authenticatedState = AuthRepository.state.value as? AuthState.Authenticated
                                     ?: return@launch
                                 ProfileRepository.ensureLoaded(authenticatedState.userId)
                                 ProfileRepository.pullProfiles()
@@ -655,5 +664,7 @@ internal fun AppGate(
                 }
             }
         }
+
+        ApachiyAccountLimitOverlays()
     }
 }
