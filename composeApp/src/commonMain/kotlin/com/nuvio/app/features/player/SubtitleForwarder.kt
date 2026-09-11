@@ -1,6 +1,6 @@
 package com.nuvio.app.features.player
 
-import kotlinx.coroutines.flow.first
+import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
 import kotlinx.coroutines.withTimeoutOrNull
 
 object SubtitleForwarder {
@@ -15,20 +15,33 @@ object SubtitleForwarder {
         videoId: String,
         preferredLanguage: String,
         secondaryLanguage: String?,
-        timeoutMs: Long = 10_000L,
+        timeoutMs: Long = 20_000L,
+        sourceUrl: String? = null,
+        sourceHeaders: Map<String, String> = emptyMap(),
+        videoHash: String? = null,
+        videoSize: Long? = null,
+        filename: String? = null,
     ): List<SubtitleInput>? {
         return try {
             withTimeoutOrNull(timeoutMs) {
-                SubtitleRepository.fetchAddonSubtitles(type, videoId)
-
-                // Give the internal coroutine a chance to start and set isLoading = true
-                kotlinx.coroutines.delay(50)
-
-                // Wait for loading to complete (isLoading goes from true back to false)
-                // If it's already false (fetch completed very quickly or never started), skip waiting
-                if (SubtitleRepository.isLoading.value) {
-                    SubtitleRepository.isLoading.first { !it }
+                val headers = sanitizePlaybackHeaders(sourceHeaders)
+                val extract = sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                    runCatching { EmbeddedSubtitleExtractor.extract(url, headers) }.getOrNull()
                 }
+                if (extract?.hasEmbeddedSpanish == true) {
+                    return@withTimeoutOrNull emptyList()
+                }
+
+                SubtitleRepository.fetchAddonSubtitles(
+                    type = type,
+                    videoId = videoId,
+                    videoHash = videoHash,
+                    videoSize = videoSize,
+                    filename = filename,
+                    hasEmbeddedSpanish = false,
+                    reference = extract?.reference,
+                    sourceHeaders = headers,
+                ).join()
 
                 val allSubtitles = SubtitleRepository.addonSubtitles.value
 

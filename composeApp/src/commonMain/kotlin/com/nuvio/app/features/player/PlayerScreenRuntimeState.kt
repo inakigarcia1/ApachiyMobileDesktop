@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -94,6 +96,8 @@ internal class PlayerScreenRuntime(
     val torrentInfoHash: String? get() = args.torrentInfoHash
     val torrentFileIdx: Int? get() = args.torrentFileIdx
     val torrentFilename: String? get() = args.torrentFilename
+    val videoHash: String? get() = args.videoHash
+    val videoSize: Long? get() = args.videoSize
     val torrentTrackers: List<String> get() = args.torrentTrackers
     val initialPositionMs: Long get() = args.initialPositionMs
     val initialProgressFraction: Float? get() = args.initialProgressFraction
@@ -145,8 +149,8 @@ internal class PlayerScreenRuntime(
     var activeTorrentFileIdx by mutableStateOf(torrentFileIdx)
     var activeTorrentFilename by mutableStateOf(torrentFilename)
     var activeTorrentTrackers by mutableStateOf(torrentTrackers)
-    var activeVideoHash by mutableStateOf<String?>(null)
-    var activeVideoSize by mutableStateOf<Long?>(null)
+    var activeVideoHash by mutableStateOf(videoHash)
+    var activeVideoSize by mutableStateOf(videoSize)
     var p2pResolvedSourceUrl by mutableStateOf<String?>(null)
     var activeSourceIdentityKey by mutableStateOf(
         torrentInfoHash?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { hash ->
@@ -187,6 +191,8 @@ internal class PlayerScreenRuntime(
     var seekProgressSyncJob by mutableStateOf<Job?>(null)
     var accumulatedSeekState by mutableStateOf<PlayerAccumulatedSeekState?>(null)
     var initialLoadCompleted by mutableStateOf(false)
+    var subtitlePipelineDone by mutableStateOf(false)
+    var openingOverlayStartMark: TimeMark? = TimeSource.Monotonic.markNow()
     var speedBoostRestoreSpeed by mutableStateOf<Float?>(null)
     var isHoldToSpeedGestureActive by mutableStateOf(false)
     var initialSeekApplied by mutableStateOf(

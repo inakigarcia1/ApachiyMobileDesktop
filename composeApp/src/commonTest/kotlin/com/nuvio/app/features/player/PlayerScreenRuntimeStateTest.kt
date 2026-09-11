@@ -153,6 +153,8 @@ class PlayerScreenRuntimeStateTest {
         torrentInfoHash = null,
         torrentFileIdx = null,
         torrentFilename = null,
+        videoHash = null,
+        videoSize = null,
         torrentTrackers = emptyList(),
         initialPositionMs = 0L,
         initialProgressFraction = null,

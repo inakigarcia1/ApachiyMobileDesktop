@@ -10,6 +10,8 @@ import com.nuvio.app.features.watchprogress.WatchProgressClock
 import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
+import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
+import kotlin.time.TimeSource
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -52,7 +54,7 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
     if (lastResetPlaybackIdentity != identity) {
         lastResetPlaybackIdentity = identity
         shouldPlay = true
-        initialLoadCompleted = false
+        resetOpeningOverlayForNewSource()
         speedBoostRestoreSpeed = null
         isHoldToSpeedGestureActive = false
         initialSeekApplied = activeInitialPositionMs <= 0L &&
@@ -73,6 +75,26 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
         hasSentCompletionScrobbleForCurrentItem = false
         currentTrackingMedia = null
         resetTrackSelectionState()
+    }
+}
+
+internal fun PlayerScreenRuntime.resetOpeningOverlayForNewSource() {
+    initialLoadCompleted = false
+    subtitlePipelineDone = false
+    openingOverlayStartMark = TimeSource.Monotonic.markNow()
+}
+
+internal fun PlayerScreenRuntime.tryCompleteOpeningOverlay() {
+    if (initialLoadCompleted) return
+    val elapsedMs = openingOverlayStartMark?.elapsedNow()?.inWholeMilliseconds ?: 0L
+    if (
+        AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
+            playerIsLoading = playbackSnapshot.isLoading,
+            pipelineDone = subtitlePipelineDone,
+            elapsedMs = elapsedMs,
+        )
+    ) {
+        initialLoadCompleted = true
     }
 }
 

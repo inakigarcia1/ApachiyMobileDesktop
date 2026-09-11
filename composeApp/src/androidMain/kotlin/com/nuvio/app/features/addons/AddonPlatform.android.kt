@@ -326,3 +326,30 @@ actual suspend fun httpRequestRaw(
             )
         }
     }
+
+actual suspend fun httpGetBytesWithHeaders(
+    url: String,
+    headers: Map<String, String>,
+    maxBytes: Int,
+): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching {
+        val builder = Request.Builder().url(url)
+        headers.withoutAcceptEncoding().forEach { (key, value) ->
+            builder.header(key, value)
+        }
+        AddonHttpClientProvider.get().newCall(builder.build()).execute().use { response ->
+            if (!response.isSuccessful && response.code != 206) return@use null
+            readAtMostBytes(response.body?.byteStream() ?: return@use null, maxBytes).bytes
+        }
+    }.getOrNull()
+}
+
+actual suspend fun readLocalFilePrefix(path: String, maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching {
+        val file = File(path)
+        if (!file.isFile) return@runCatching null
+        file.inputStream().use { stream ->
+            readAtMostBytes(stream, maxBytes).bytes
+        }
+    }.getOrNull()
+}

@@ -555,7 +555,10 @@ internal fun StreamDestination(
             }
             return
         }
-        val sourceUrl = stream.playableDirectUrl ?: return
+        val sourceUrl = stream.playableDirectUrl
+        if (sourceUrl == null) {
+            return
+        }
         if (playerSettings.streamReuseLastLinkEnabled) {
             val cacheKey = StreamLinkCacheRepository.contentKey(
                 type = launch.type,
@@ -603,6 +606,9 @@ internal fun StreamDestination(
             videoId = effectiveVideoId,
             parentMetaId = launch.parentMetaId ?: effectiveVideoId,
             parentMetaType = launch.parentMetaType ?: launch.type,
+            torrentFilename = stream.behaviorHints.filename,
+            videoHash = stream.behaviorHints.videoHash,
+            videoSize = stream.behaviorHints.videoSize,
             initialPositionMs = resolvedResumePositionMs ?: 0L,
             initialProgressFraction = resolvedResumeProgressFraction,
         )

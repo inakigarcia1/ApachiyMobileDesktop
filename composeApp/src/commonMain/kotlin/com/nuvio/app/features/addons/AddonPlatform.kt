@@ -41,3 +41,11 @@ expect suspend fun httpRequestRaw(
     followRedirects: Boolean = true,
     maxResponseBodyBytes: Int = DefaultRawHttpResponseMaxBytes,
 ): RawHttpResponse
+
+expect suspend fun httpGetBytesWithHeaders(
+    url: String,
+    headers: Map<String, String>,
+    maxBytes: Int,
+): ByteArray?
+
+expect suspend fun readLocalFilePrefix(path: String, maxBytes: Int): ByteArray?

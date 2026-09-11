@@ -42,6 +42,8 @@ data class PlayerLaunch(
     val torrentInfoHash: String? = null,
     val torrentFileIdx: Int? = null,
     val torrentFilename: String? = null,
+    val videoHash: String? = null,
+    val videoSize: Long? = null,
     val torrentTrackers: List<String> = emptyList(),
     val initialPositionMs: Long = 0L,
     val initialProgressFraction: Float? = null,

@@ -11,6 +11,7 @@ import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -191,3 +192,23 @@ actual suspend fun httpRequestRaw(
                 },
             )
         }
+
+actual suspend fun httpGetBytesWithHeaders(
+    url: String,
+    headers: Map<String, String>,
+    maxBytes: Int,
+): ByteArray? =
+    runCatching {
+        val response = addonHttpClient.get(url) {
+            headers.forEach { (key, value) ->
+                header(key, value)
+            }
+        }
+        if (!response.status.isSuccess() && response.status.value != 206) {
+            return@runCatching null
+        }
+        val bytes = response.readRawBytes()
+        if (bytes.size <= maxBytes) bytes else bytes.copyOf(maxBytes)
+    }.getOrNull()
+
+actual suspend fun readLocalFilePrefix(path: String, maxBytes: Int): ByteArray? = null

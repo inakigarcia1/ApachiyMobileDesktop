@@ -81,6 +81,8 @@ internal fun PlayerDestination(
         torrentInfoHash = launch.torrentInfoHash,
         torrentFileIdx = launch.torrentFileIdx,
         torrentFilename = launch.torrentFilename,
+        videoHash = launch.videoHash,
+        videoSize = launch.videoSize,
         torrentTrackers = launch.torrentTrackers,
         initialPositionMs = launch.initialPositionMs,
         initialProgressFraction = launch.initialProgressFraction,

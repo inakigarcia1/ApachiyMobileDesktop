@@ -14,6 +14,9 @@ internal val PlayerScreenRuntime.addonSubtitleFetchKey: String?
         addons = addonsUiState.addons,
         type = activeAddonSubtitleType,
         videoId = activeVideoId,
+        videoHash = activeVideoHash,
+        videoSize = activeVideoSize,
+        filename = activeTorrentFilename,
     )
 
 internal val PlayerScreenRuntime.visibleAddonSubtitles: List<AddonSubtitle>
@@ -139,15 +142,21 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
             }
         }
         PersistedSubtitleSelectionType.ADDON -> {
-            val url = persistedAddonSubtitleUrlForItem(
+            val persistedUrl = persistedAddonSubtitleUrlForItem(
                 preference = preference,
                 itemId = subtitlePreferenceItemId,
             )
+            // The persisted URL carries the media ticket issued in a previous
+            // session; prefer the freshly fetched entry when it is available.
+            val freshUrl = preference.addonSubtitleId?.let { persistedId ->
+                addonSubtitles.firstOrNull { it.id == persistedId }?.url
+            }
+            val url = freshUrl ?: persistedUrl
             if (url != null) {
                 selectedAddonSubtitleId = preference.addonSubtitleId ?: url
                 selectedSubtitleIndex = -1
                 useCustomSubtitles = true
-                playerController?.setSubtitleUri(url)
+                applyAddonSubtitleUri(url)
                 preferredSubtitleSelectionApplied = true
             } else {
                 selectedAddonSubtitleId = null
@@ -287,7 +296,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
                 selectedAddonSubtitleId = primaryAddonMatch.id
                 selectedSubtitleIndex = -1
                 useCustomSubtitles = true
-                playerController?.setSubtitleUri(primaryAddonMatch.url)
+                applyAddonSubtitleUri(primaryAddonMatch.url)
                 return
             }
         }
@@ -329,7 +338,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
             selectedAddonSubtitleId = forcedAddonMatch.id
             selectedSubtitleIndex = -1
             useCustomSubtitles = true
-            playerController?.setSubtitleUri(forcedAddonMatch.url)
+            applyAddonSubtitleUri(forcedAddonMatch.url)
         } else {
             disableAutomaticSubtitleSelection()
         }
@@ -367,7 +376,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
         selectedAddonSubtitleId = addonMatch.id
         selectedSubtitleIndex = -1
         useCustomSubtitles = true
-        playerController?.setSubtitleUri(addonMatch.url)
+        applyAddonSubtitleUri(addonMatch.url)
     } else if (!preferredSubtitleSelectionApplied) {
         disableAutomaticSubtitleSelection()
         preferredSubtitleSelectionApplied = true

@@ -38,6 +38,11 @@ suspend fun prepareExternalPlayerLaunch(
     preferredLanguage: String,
     secondaryLanguage: String?,
     onOverlayMessage: (String?) -> Unit,
+    sourceUrl: String? = null,
+    sourceHeaders: Map<String, String> = emptyMap(),
+    videoHash: String? = null,
+    videoSize: Long? = null,
+    filename: String? = null,
 ): ExternalPlayerPlaybackRequest = coroutineScope {
     var result = request
 
@@ -50,6 +55,11 @@ suspend fun prepareExternalPlayerLaunch(
                 videoId = videoId,
                 preferredLanguage = preferredLanguage,
                 secondaryLanguage = secondaryLanguage,
+                sourceUrl = sourceUrl ?: request.sourceUrl,
+                sourceHeaders = sourceHeaders.ifEmpty { request.sourceHeaders },
+                videoHash = videoHash,
+                videoSize = videoSize,
+                filename = filename,
             )
 
             if (subtitles != null) {

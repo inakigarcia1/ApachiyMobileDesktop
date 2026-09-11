@@ -78,7 +78,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         credentialRefreshJob?.cancel()
         credentialRefreshJob = null
         credentialRefreshAttemptedSourceUrl = null
-        initialLoadCompleted = false
+        resetOpeningOverlayForNewSource()
         lastProgressPersistEpochMs = 0L
         previousIsPlaying = false
         pendingSeekScrobbleRestart = false
@@ -127,7 +127,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         playerController = null
         playerControllerSourceUrl = null
         playbackSnapshot = PlayerPlaybackSnapshot()
-        initialLoadCompleted = false
+        resetOpeningOverlayForNewSource()
 
         try {
             val localUrl = P2pStreamingEngine.startStream(
@@ -245,9 +245,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         playerControllerSourceUrl,
         subtitleTracks,
     ) {
-        val fetchKey = addonSubtitleFetchKey ?: return@LaunchedEffect
+        val fetchKey = addonSubtitleFetchKey
         if (SubtitleLanguageMatching.hasEmbeddedSpanishSubtitleTrack(subtitleTracks)) {
             SubtitleRepository.clear()
+            subtitlePipelineDone = true
+            tryCompleteOpeningOverlay()
+            return@LaunchedEffect
+        }
+        if (fetchKey == null) {
+            subtitlePipelineDone = true
+            tryCompleteOpeningOverlay()
             return@LaunchedEffect
         }
         if (autoFetchedAddonSubtitlesForKey == fetchKey) return@LaunchedEffect
@@ -258,6 +265,22 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     LaunchedEffect(subtitleTracks) {
         if (SubtitleLanguageMatching.hasEmbeddedSpanishSubtitleTrack(subtitleTracks)) {
             SubtitleRepository.clear()
+            subtitlePipelineDone = true
+            tryCompleteOpeningOverlay()
+        }
+    }
+
+    LaunchedEffect(
+        activeSourceUrl,
+        playbackSnapshot.isLoading,
+        subtitlePipelineDone,
+        initialLoadCompleted,
+    ) {
+        if (initialLoadCompleted) return@LaunchedEffect
+        while (!initialLoadCompleted) {
+            tryCompleteOpeningOverlay()
+            if (initialLoadCompleted) break
+            delay(200)
         }
     }
 
@@ -621,13 +644,14 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     LaunchedEffect(
         playbackSnapshot.positionMs,
         playbackSnapshot.durationMs,
+        playbackSnapshot.isLoading,
         nextEpisodeInfo,
         skipIntervals,
         playerSettingsUiState.nextEpisodeThresholdMode,
         playerSettingsUiState.nextEpisodeThresholdPercent,
         playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
     ) {
-        if (nextEpisodeInfo == null || playbackSnapshot.durationMs <= 0L) {
+        if (nextEpisodeInfo == null || playbackSnapshot.durationMs <= 0L || playbackSnapshot.isLoading) {
             showNextEpisodeCard = false
             return@LaunchedEffect
         }
@@ -649,8 +673,13 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         }
     }
 
-    LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
-        if (playbackSnapshot.isEnded && nextEpisodeInfo != null && !showNextEpisodeCard) {
+    LaunchedEffect(playbackSnapshot.isEnded, playbackSnapshot.isLoading, nextEpisodeInfo) {
+        if (
+            playbackSnapshot.isEnded &&
+            !playbackSnapshot.isLoading &&
+            nextEpisodeInfo != null &&
+            !showNextEpisodeCard
+        ) {
             showNextEpisodeCard = true
             if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
                 playNextEpisode()

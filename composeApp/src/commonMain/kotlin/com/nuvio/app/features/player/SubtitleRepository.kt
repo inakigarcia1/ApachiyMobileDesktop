@@ -1,10 +1,14 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.AddonResource
 import com.nuvio.app.features.addons.buildAddonResourceUrl
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.addons.fetchAddonResponseText
+import com.nuvio.app.features.addons.httpRequestRaw
+import com.nuvio.app.features.player.embedded.EmbeddedSubtitleReference
+import com.nuvio.app.features.player.embedded.selectPreferredSpanishAddonSubtitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +25,6 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -54,17 +57,18 @@ object SubtitleRepository {
         videoSize: Long? = null,
         filename: String? = null,
         hasEmbeddedSpanish: Boolean = false,
-    ) {
-        if (hasEmbeddedSpanish) {
-            activeFetchJob?.cancel()
-            _addonSubtitles.value = emptyList()
-            _isLoading.value = false
-            _error.value = null
-            return
-        }
-
+        reference: EmbeddedSubtitleReference? = null,
+        sourceHeaders: Map<String, String> = emptyMap(),
+    ): Job {
         activeFetchJob?.cancel()
         activeFetchJob = scope.launch {
+            if (hasEmbeddedSpanish) {
+                _addonSubtitles.value = emptyList()
+                _isLoading.value = false
+                _error.value = null
+                return@launch
+            }
+
             val requestType = canonicalSubtitleType(type)
             _isLoading.value = true
             _error.value = null
@@ -102,11 +106,11 @@ object SubtitleRepository {
                         )
 
                         try {
-                            val response = withTimeoutOrNull(30_000L) {
-                                withContext(Dispatchers.Default) {
-                                    fetchAddonResponseText(subtitleUrl)
-                                }
-                            } ?: return@async
+                            val response = loadAddonSubtitlePayload(
+                                subtitleUrl = subtitleUrl,
+                                manifest = manifest,
+                                reference = reference,
+                            ) ?: return@async
 
                             val parsed = json.parseToJsonElement(response).jsonObject
                             val subtitlesArray = parsed["subtitles"]?.jsonArray ?: return@async
@@ -147,11 +151,20 @@ object SubtitleRepository {
                 }.awaitAll()
             }
 
+            preloadPreferredSpanishSubtitle(
+                subtitles = _addonSubtitles.value,
+                videoHash = videoHash,
+                videoSize = videoSize,
+                filename = filename,
+                sourceHeaders = sourceHeaders,
+            )
+
             if (_addonSubtitles.value.isEmpty()) {
                 _error.value = getString(Res.string.compose_player_no_subtitles_found)
             }
             _isLoading.value = false
         }
+        return activeFetchJob!!
     }
 
     fun clear() {
@@ -159,6 +172,61 @@ object SubtitleRepository {
         _addonSubtitles.value = emptyList()
         _isLoading.value = false
         _error.value = null
+    }
+
+    private suspend fun loadAddonSubtitlePayload(
+        subtitleUrl: String,
+        manifest: AddonManifest,
+        reference: EmbeddedSubtitleReference?,
+    ): String? {
+        val resolved = subtitleUrl
+        if (AddonSubtitleRequest.shouldPostEmbeddedReference(manifest, subtitleUrl, reference)) {
+            val posted = withTimeoutOrNull(30_000L) {
+                runCatching {
+                    val (contentType, body) = AddonSubtitleRequest.buildMultipartBody(reference!!)
+                    httpRequestRaw(
+                        method = "POST",
+                        url = resolved,
+                        headers = mapOf(
+                            "Accept" to "application/json",
+                            "Content-Type" to contentType,
+                        ),
+                        body = body,
+                    )
+                }.getOrNull()
+            }
+            if (posted != null && !AddonSubtitleRequest.shouldFallbackPostToGet(posted.status)) {
+                return posted.body
+            }
+        }
+        return withTimeoutOrNull(30_000L) {
+            withContext(Dispatchers.Default) {
+                fetchAddonResponseText(resolved)
+            }
+        }
+    }
+
+    private suspend fun preloadPreferredSpanishSubtitle(
+        subtitles: List<AddonSubtitle>,
+        videoHash: String?,
+        videoSize: Long?,
+        filename: String?,
+        sourceHeaders: Map<String, String>,
+    ) {
+        val preferred = selectPreferredSpanishAddonSubtitle(subtitles) ?: return
+        runCatching {
+            val cacheKey = buildAddonSubtitleCacheKey(
+                remoteUrl = preferred.url,
+                videoHash = videoHash,
+                videoSize = videoSize,
+                filename = filename,
+            )
+            resolvePlaybackSubtitleUri(
+                remoteUrl = preferred.url,
+                sourceHeaders = sourceHeaders,
+                cacheKey = cacheKey,
+            )
+        }
     }
 }
 

@@ -806,6 +806,11 @@ internal fun MainAppContent(
                 preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                 secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
                 onOverlayMessage = { _ -> },
+                sourceUrl = launch.sourceUrl,
+                sourceHeaders = launch.sourceHeaders,
+                videoHash = launch.videoHash,
+                videoSize = launch.videoSize,
+                filename = launch.torrentFilename,
             )
             StreamsRepository.setOverlayVisible(false)
             return when (

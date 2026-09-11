@@ -275,6 +275,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
     activeSourceIdentityKey = sourceIdentityKey
     activeVideoHash = stream.behaviorHints.videoHash
     activeVideoSize = stream.behaviorHints.videoSize
+    activeTorrentFilename = stream.behaviorHints.filename
     activeStreamTitle = stream.streamLabel
     activeStreamSubtitle = stream.streamSubtitle
     activeProviderName = stream.addonName

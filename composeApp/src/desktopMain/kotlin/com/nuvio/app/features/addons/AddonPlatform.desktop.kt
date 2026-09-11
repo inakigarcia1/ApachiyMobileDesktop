@@ -263,3 +263,27 @@ private fun readResponseBody(body: ResponseBody?): String {
         String(bytes, Charsets.UTF_8)
     }
 }
+
+actual suspend fun httpGetBytesWithHeaders(
+    url: String,
+    headers: Map<String, String>,
+    maxBytes: Int,
+): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching {
+        val request = buildDesktopRequest("GET", url, headers, "")
+        desktopHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful && response.code != 206) return@use null
+            readAtMostBytes(response.body?.byteStream() ?: return@use null, maxBytes).bytes
+        }
+    }.getOrNull()
+}
+
+actual suspend fun readLocalFilePrefix(path: String, maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching {
+        val file = java.io.File(path)
+        if (!file.isFile) return@runCatching null
+        file.inputStream().use { stream ->
+            readAtMostBytes(stream, maxBytes).bytes
+        }
+    }.getOrNull()
+}
