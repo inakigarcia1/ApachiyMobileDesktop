@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.network.rewriteLocalDevUrl
 import com.nuvio.app.core.storage.DesktopStorage
 import com.nuvio.app.features.addons.DesktopAddonHttpClientProvider
 import com.nuvio.app.features.addons.encodeUnsafeHttpUrlCharacters
@@ -16,7 +17,8 @@ internal actual suspend fun prepareAddonSubtitlePlaybackUri(
     sourceHeaders: Map<String, String>,
     cacheKey: String,
 ): String? = withContext(Dispatchers.IO) {
-    val resolvedUrl = remoteUrl
+    val rewritten = rewriteLocalDevUrl(remoteUrl) ?: remoteUrl
+    val resolvedUrl = rewritten
     val parts = parseRawHttpUrlParts(resolvedUrl)
     val httpUrl = resolvedUrl.toHttpUrlOrNull()
         ?: resolvedUrl.encodeUnsafeHttpUrlCharacters().toHttpUrlOrNull()

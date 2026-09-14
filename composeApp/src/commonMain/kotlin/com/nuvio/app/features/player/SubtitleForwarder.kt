@@ -25,8 +25,15 @@ object SubtitleForwarder {
         return try {
             withTimeoutOrNull(timeoutMs) {
                 val headers = sanitizePlaybackHeaders(sourceHeaders)
+                val identity = sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                    runCatching {
+                        EmbeddedSubtitleExtractor.probeFileIdentity(url, headers, videoSize)
+                    }.getOrNull()
+                }
+                val listingFilename = identity?.filename ?: filename
+                val listingSize = identity?.sizeBytes ?: videoSize
                 val extract = sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                    runCatching { EmbeddedSubtitleExtractor.extract(url, headers) }.getOrNull()
+                    runCatching { EmbeddedSubtitleExtractor.extract(url, headers, listingSize) }.getOrNull()
                 }
                 if (extract?.hasEmbeddedSpanish == true) {
                     return@withTimeoutOrNull emptyList()
@@ -36,8 +43,8 @@ object SubtitleForwarder {
                     type = type,
                     videoId = videoId,
                     videoHash = videoHash,
-                    videoSize = videoSize,
-                    filename = filename,
+                    videoSize = listingSize,
+                    filename = listingFilename,
                     hasEmbeddedSpanish = false,
                     reference = extract?.reference,
                     sourceHeaders = headers,

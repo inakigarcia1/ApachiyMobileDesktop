@@ -20,13 +20,30 @@ internal object MkvTextSubtitleParser {
     private const val ID_BLOCK_DURATION = 0x9BL
     private const val ID_INFO = 0x1549A966L
     private const val ID_TIMESTAMP_SCALE = 0x2AD7B1L
+    private const val ID_SEEK_HEAD = 0x114D9B74L
+    private const val ID_SEEK = 0x4DBBL
+    private const val ID_SEEK_ID = 0x53ABL
+    private const val ID_SEEK_POSITION = 0x53ACL
+    private const val ID_CUES = 0x1C53BB6BL
+    private const val ID_CUE_POINT = 0xBBL
+    private const val ID_CUE_TIME = 0xB3L
+    private const val ID_CUE_TRACK_POSITIONS = 0xB7L
+    private const val ID_CUE_TRACK = 0xF7L
+    private const val ID_CUE_CLUSTER_POSITION = 0xF1L
+    private const val ID_CUE_RELATIVE_POSITION = 0xF0L
     private const val TRACK_TYPE_SUBTITLE = 0x11L
 
-    fun parse(data: ByteArray): List<EmbeddedTextTrack> {
-        if (data.size < 8) return emptyList()
+    fun parse(data: ByteArray): List<EmbeddedTextTrack> = parseLayout(data).tracks
+
+    fun parseLayout(data: ByteArray): MkvLayout {
+        if (data.size < 8) {
+            return MkvLayout(emptyList(), 1_000_000L, 0L, null)
+        }
         var offset = 0
         val tracks = mutableMapOf<Long, MutableTrack>()
         var timestampScale = 1_000_000L
+        var segmentDataOffset = 0L
+        var cuesRelative: Long? = null
 
         while (offset < data.size) {
             val header = readElementHeader(data, offset) ?: break
@@ -37,35 +54,221 @@ internal object MkvTextSubtitleParser {
                 continue
             }
             if (id == ID_SEGMENT) {
-                parseSegment(data, contentStart, size, tracks, timestampScale).also {
-                    timestampScale = it
-                }
+                segmentDataOffset = contentStart.toLong()
+                val meta = parseSegment(data, contentStart, size, tracks, timestampScale)
+                timestampScale = meta.timestampScale
+                cuesRelative = meta.cuesRelativeOffset
                 break
             }
             offset = skipOrEnd(contentStart, size, data.size)
         }
 
+        val cuesOffset = cuesRelative?.let { relative -> segmentDataOffset + relative }
+        return MkvLayout(
+            tracks = tracks.values.mapNotNull { track -> toTextTrack(track) },
+            timestampScale = timestampScale.coerceAtLeast(1L),
+            segmentDataOffset = segmentDataOffset,
+            cuesOffset = cuesOffset,
+        )
+    }
+
+    fun parseCues(data: ByteArray): List<MkvCueRef> {
+        if (data.size < 4) return emptyList()
+        var offset = 0
+        val header = readElementHeader(data, 0)
+        val payloadStart: Int
+        val payloadEnd: Int
+        if (header?.id == ID_CUES) {
+            payloadStart = header.headerSize
+            payloadEnd = elementEnd(header.headerSize, header.size, data.size)
+        } else {
+            payloadStart = 0
+            payloadEnd = data.size
+        }
+        val refs = mutableListOf<MkvCueRef>()
+        offset = payloadStart
+        while (offset < payloadEnd) {
+            val pointHeader = readElementHeader(data, offset) ?: break
+            val contentStart = offset + pointHeader.headerSize
+            val contentEnd = skipOrEnd(contentStart, pointHeader.size, payloadEnd)
+            if (pointHeader.id == ID_CUE_POINT) {
+                refs += parseCuePoint(data, contentStart, contentEnd)
+            }
+            offset = contentEnd
+        }
+        return refs
+    }
+
+    fun harvestClusterWindow(
+        window: ByteArray,
+        existing: List<EmbeddedTextTrack>,
+        timestampScale: Long,
+    ): List<EmbeddedTextTrack> {
+        if (window.size < 8 || existing.isEmpty()) return existing
+        val mutable = existing.associate { track ->
+            track.trackNumber to MutableTrack(
+                number = track.trackNumber,
+                language = track.language,
+                name = track.name,
+                forced = track.forced,
+                codecId = codecIdOf(track.codec),
+                codecPrivate = track.assHeader?.encodeToByteArray(),
+                cues = track.cues.map { cue ->
+                    TimedCue(cue.startMs * 1_000_000L, cue.endMs * 1_000_000L, cue.text)
+                }.toMutableList(),
+            )
+        }.toMutableMap()
+        var offset = 0
+        val scanLimit = minOf(window.size - 4, 128)
+        while (offset < scanLimit && !startsWithCluster(window, offset)) {
+            offset++
+        }
+        val header = readElementHeader(window, offset) ?: return existing
+        if (header.id != ID_CLUSTER) return existing
+        parseCluster(window, offset + header.headerSize, header.size, mutable, timestampScale.coerceAtLeast(1L))
+        return mutable.values.mapNotNull { track -> toTextTrack(track) }
+    }
+
+    fun harvestBlockWindow(
+        window: ByteArray,
+        existing: List<EmbeddedTextTrack>,
+        timestampScale: Long,
+        cueTimeTicks: Long,
+    ): List<EmbeddedTextTrack> {
+        if (window.size < 4 || existing.isEmpty()) return existing
+        val mutable = existingToMutable(existing)
         val scale = timestampScale.coerceAtLeast(1L)
-        return tracks.values.mapNotNull { track ->
-            val codec = codecOf(track.codecId) ?: return@mapNotNull null
-            if (track.cues.isEmpty()) return@mapNotNull null
-            val cues = track.cues.map { cue ->
+        // CueRelativePosition is from the Cluster payload, so the SimpleBlock sits a
+        // few bytes into this window (Cluster ID+size). Scan a tight prefix for the
+        // first subtitle block; do not walk the whole 16KB or later cues get this time.
+        val scanLimit = minOf(window.size - 4, 96)
+        var at = 0
+        while (at < scanLimit) {
+            val idByte = window[at].toInt() and 0xFF
+            if ((idByte == 0xA3 || idByte == 0xA0) &&
+                tryParseBlockAt(window, at, mutable, scale, cueTimeTicks)
+            ) {
+                break
+            }
+            at++
+        }
+        return mutable.values.mapNotNull { track -> toTextTrack(track) }
+    }
+
+    private fun existingToMutable(existing: List<EmbeddedTextTrack>): MutableMap<Long, MutableTrack> =
+        existing.associate { track ->
+            track.trackNumber to MutableTrack(
+                number = track.trackNumber,
+                language = track.language,
+                name = track.name,
+                forced = track.forced,
+                codecId = codecIdOf(track.codec),
+                codecPrivate = track.assHeader?.encodeToByteArray(),
+                cues = track.cues.map { cue ->
+                    TimedCue(cue.startMs * 1_000_000L, cue.endMs * 1_000_000L, cue.text)
+                }.toMutableList(),
+            )
+        }.toMutableMap()
+
+    private fun tryParseBlockAt(
+        window: ByteArray,
+        offset: Int,
+        tracks: MutableMap<Long, MutableTrack>,
+        timestampScale: Long,
+        cueTimeTicks: Long,
+    ): Boolean {
+        val header = readElementHeader(window, offset) ?: return false
+        val before = tracks.values.sumOf { it.cues.size }
+        val contentStart = offset + header.headerSize
+        val contentEnd = skipOrEnd(contentStart, header.size, window.size)
+        when (header.id) {
+            ID_SIMPLE_BLOCK -> parseSimpleBlock(
+                window, contentStart, contentEnd, 0L, timestampScale, tracks, cueTimeTicks,
+            )
+            ID_BLOCK_GROUP -> parseBlockGroup(
+                window, contentStart, contentEnd, 0L, timestampScale, tracks, cueTimeTicks,
+            )
+            else -> return false
+        }
+        return tracks.values.sumOf { it.cues.size } > before
+    }
+
+    private fun parseCuePoint(data: ByteArray, start: Int, end: Int): List<MkvCueRef> {
+        var offset = start
+        var timeTicks = 0L
+        val refs = mutableListOf<MkvCueRef>()
+        while (offset < end) {
+            val header = readElementHeader(data, offset) ?: break
+            val contentStart = offset + header.headerSize
+            val contentEnd = skipOrEnd(contentStart, header.size, end)
+            when (header.id) {
+                ID_CUE_TIME -> timeTicks = readUnsigned(data, contentStart, header.size.toInt())
+                ID_CUE_TRACK_POSITIONS -> {
+                    var trackNumber = -1L
+                    var clusterPosition = -1L
+                    var relativePosition: Long? = null
+                    var inner = contentStart
+                    while (inner < contentEnd) {
+                        val innerHeader = readElementHeader(data, inner) ?: break
+                        val innerStart = inner + innerHeader.headerSize
+                        val innerEnd = skipOrEnd(innerStart, innerHeader.size, contentEnd)
+                        when (innerHeader.id) {
+                            ID_CUE_TRACK -> trackNumber = readUnsigned(data, innerStart, innerHeader.size.toInt())
+                            ID_CUE_CLUSTER_POSITION -> clusterPosition = readUnsigned(data, innerStart, innerHeader.size.toInt())
+                            ID_CUE_RELATIVE_POSITION -> relativePosition = readUnsigned(data, innerStart, innerHeader.size.toInt())
+                        }
+                        inner = innerEnd
+                    }
+                    if (trackNumber >= 0 && clusterPosition >= 0) {
+                        refs += MkvCueRef(timeTicks, trackNumber, clusterPosition, relativePosition)
+                    }
+                }
+            }
+            offset = contentEnd
+        }
+        return refs
+    }
+
+    private fun toTextTrack(track: MutableTrack): EmbeddedTextTrack? {
+        val codec = codecOf(track.codecId) ?: return null
+        val cues = track.cues
+            .map { cue ->
                 EmbeddedSubtitleCue(
                     startMs = cue.startNs / 1_000_000,
                     endMs = (cue.endNs / 1_000_000).coerceAtLeast(cue.startNs / 1_000_000 + 500),
                     text = cue.text,
                 )
             }
-            EmbeddedTextTrack(
-                language = track.language,
-                name = track.name,
-                forced = track.forced,
-                codec = codec,
-                cues = cues,
-                assHeader = track.codecPrivate?.decodeToString(),
-            )
-        }.also { _ -> scale }
+            .sortedBy { it.startMs }
+        return EmbeddedTextTrack(
+            language = track.language,
+            name = track.name,
+            forced = track.forced,
+            codec = codec,
+            cues = cues,
+            assHeader = track.codecPrivate?.decodeToString(),
+            trackNumber = track.number,
+        )
     }
+
+    private fun codecIdOf(codec: EmbeddedTextCodec): String = when (codec) {
+        EmbeddedTextCodec.SubRip -> "S_TEXT/UTF8"
+        EmbeddedTextCodec.Ass -> "S_TEXT/ASS"
+        EmbeddedTextCodec.Ssa -> "S_TEXT/SSA"
+        EmbeddedTextCodec.WebVtt -> "S_TEXT/WEBVTT"
+    }
+
+    private fun startsWithCluster(data: ByteArray, offset: Int): Boolean =
+        offset + 4 <= data.size &&
+            (data[offset].toInt() and 0xFF) == 0x1F &&
+            (data[offset + 1].toInt() and 0xFF) == 0x43 &&
+            (data[offset + 2].toInt() and 0xFF) == 0xB6 &&
+            (data[offset + 3].toInt() and 0xFF) == 0x75
+
+    private class SegmentMeta(
+        var timestampScale: Long,
+        var cuesRelativeOffset: Long? = null,
+    )
 
     private fun parseSegment(
         data: ByteArray,
@@ -73,22 +276,57 @@ internal object MkvTextSubtitleParser {
         size: Long,
         tracks: MutableMap<Long, MutableTrack>,
         initialScale: Long,
-    ): Long {
+    ): SegmentMeta {
         var offset = start
         val end = elementEnd(start, size, data.size)
-        var timestampScale = initialScale
+        val meta = SegmentMeta(initialScale)
         while (offset < end) {
             val header = readElementHeader(data, offset) ?: break
             val (id, elemSize, headerSize) = header
             val contentStart = offset + headerSize
             when (id) {
-                ID_INFO -> timestampScale = parseInfo(data, contentStart, elemSize, timestampScale)
+                ID_SEEK_HEAD -> {
+                    val cuesRel = parseSeekHead(data, contentStart, elemSize)
+                    if (cuesRel != null) meta.cuesRelativeOffset = cuesRel
+                }
+                ID_INFO -> meta.timestampScale = parseInfo(data, contentStart, elemSize, meta.timestampScale)
                 ID_TRACKS -> parseTracks(data, contentStart, elemSize, tracks)
-                ID_CLUSTER -> parseCluster(data, contentStart, elemSize, tracks, timestampScale)
+                ID_CLUSTER -> parseCluster(data, contentStart, elemSize, tracks, meta.timestampScale)
             }
             offset = skipOrEnd(contentStart, elemSize, end)
         }
-        return timestampScale
+        return meta
+    }
+
+    private fun parseSeekHead(data: ByteArray, start: Int, size: Long): Long? {
+        var offset = start
+        val end = elementEnd(start, size, data.size)
+        var cuesRelative: Long? = null
+        while (offset < end) {
+            val header = readElementHeader(data, offset) ?: break
+            val contentStart = offset + header.headerSize
+            val contentEnd = skipOrEnd(contentStart, header.size, end)
+            if (header.id == ID_SEEK) {
+                var seekId = -1L
+                var seekPosition = -1L
+                var inner = contentStart
+                while (inner < contentEnd) {
+                    val innerHeader = readElementHeader(data, inner) ?: break
+                    val innerStart = inner + innerHeader.headerSize
+                    val innerEnd = skipOrEnd(innerStart, innerHeader.size, contentEnd)
+                    when (innerHeader.id) {
+                        ID_SEEK_ID -> seekId = readId(data, innerStart)?.first ?: -1L
+                        ID_SEEK_POSITION -> seekPosition = readUnsigned(data, innerStart, innerHeader.size.toInt())
+                    }
+                    inner = innerEnd
+                }
+                if (seekId == ID_CUES && seekPosition >= 0) {
+                    cuesRelative = seekPosition
+                }
+            }
+            offset = contentEnd
+        }
+        return cuesRelative
     }
 
     private fun parseInfo(data: ByteArray, start: Int, size: Long, fallback: Long): Long {
@@ -187,6 +425,7 @@ internal object MkvTextSubtitleParser {
         clusterTimestamp: Long,
         timestampScale: Long,
         tracks: MutableMap<Long, MutableTrack>,
+        absoluteTicks: Long? = null,
     ) {
         val trackVint = readVint(data, start) ?: return
         val trackNumber = trackVint.first
@@ -200,7 +439,12 @@ internal object MkvTextSubtitleParser {
         if (payloadStart >= end) return
         val text = data.decodeString(payloadStart, end).trim()
         if (text.isEmpty()) return
-        val startNs = (clusterTimestamp + relative) * timestampScale
+        val startNs = if (absoluteTicks != null) {
+            absoluteTicks * timestampScale
+        } else {
+            (clusterTimestamp + relative) * timestampScale
+        }
+        if (track.cues.any { it.startNs == startNs && it.text == text }) return
         track.cues += TimedCue(startNs, startNs + 2_000_000_000L, text)
     }
 
@@ -211,6 +455,7 @@ internal object MkvTextSubtitleParser {
         clusterTimestamp: Long,
         timestampScale: Long,
         tracks: MutableMap<Long, MutableTrack>,
+        absoluteTicks: Long? = null,
     ) {
         var offset = start
         var blockStart = -1
@@ -240,8 +485,13 @@ internal object MkvTextSubtitleParser {
         if (payloadStart >= blockEnd) return
         val text = data.decodeString(payloadStart, blockEnd).trim()
         if (text.isEmpty()) return
-        val startNs = (clusterTimestamp + relative) * timestampScale
+        val startNs = if (absoluteTicks != null) {
+            absoluteTicks * timestampScale
+        } else {
+            (clusterTimestamp + relative) * timestampScale
+        }
         val endNs = startNs + (duration ?: 2_000L) * timestampScale
+        if (track.cues.any { it.startNs == startNs && it.text == text }) return
         track.cues += TimedCue(startNs, endNs, text)
     }
 
@@ -539,9 +789,18 @@ private fun readUnsigned(data: ByteArray, offset: Int, length: Int): Long {
     return value
 }
 
-private fun elementEnd(start: Int, size: Long, limit: Int): Int {
-    val computed = start + size.toInt().coerceAtLeast(0)
-    return computed.coerceAtMost(limit).coerceAtLeast(start)
+private fun elementEnd(start: Int, size: Long, limit: Int): Int = mkvBoundedEnd(start, size, limit)
+
+/**
+ * EBML element sizes are 64-bit. A Segment for a BDRemux is several GB, so
+ * `size.toInt()` overflows and the parser never walks Tracks/Clusters inside
+ * a truncated prefix.
+ */
+internal fun mkvBoundedEnd(start: Int, size: Long, limit: Int): Int {
+    if (start >= limit) return limit
+    val remaining = (limit.toLong() - start.toLong()).coerceAtLeast(0L)
+    val take = size.coerceAtLeast(0L).coerceAtMost(remaining)
+    return start + take.toInt()
 }
 
 private fun skipOrEnd(contentStart: Int, size: Long, limit: Int): Int = elementEnd(contentStart, size, limit)

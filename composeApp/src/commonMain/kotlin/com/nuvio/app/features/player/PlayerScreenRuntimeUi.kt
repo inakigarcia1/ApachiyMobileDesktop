@@ -19,6 +19,7 @@ import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.PresenceSnapshot
 import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
 import com.nuvio.app.features.details.MetaDetailsRepository
@@ -159,8 +160,14 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         }
     }
     val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
+    val bindPlaybackSurface = AddonSubtitleLoadingGate.shouldBindPlayer(
+        pipelineDone = subtitlePipelineDone,
+        waitExpired = subtitlePipelineWaitExpired,
+    )
     val initialPositionRequestKey = currentInitialPositionRequestKey()
-    val currentPlayerSurfaceSource = playerSurfaceSourceUrl?.let { sourceUrl ->
+    val currentPlayerSurfaceSource = playerSurfaceSourceUrl
+        ?.takeIf { bindPlaybackSurface }
+        ?.let { sourceUrl ->
         PlayerSurfaceSource(
             sourceUrl = sourceUrl,
             sourceAudioUrl = activeSourceAudioUrl,
@@ -347,7 +354,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         isLoading = playbackSnapshot.isLoading,
         isLocked = playerControlsLocked,
         lockedOverlayVisible = lockedOverlayVisible,
-        controlsVisible = controlsVisible && !playerControlsLocked,
+        controlsVisible = controlsVisible && !playerControlsLocked && !openingOverlayWanted,
         parentalWarnings = parentalWarnings,
         showParentalGuide = showParentalGuide,
         showSubmitIntro = isSeries &&
@@ -403,8 +410,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         openingArtwork = background ?: poster,
         openingLogo = logo,
         openingTitle = title,
-        openingMessage = p2pInitialLoadingMessage,
-        openingProgress = p2pInitialLoadingProgress,
+        openingMessage = null,
+        openingProgress = null,
         skipPromptVisible = nativeSkipInterval != null && !playerControlsLocked,
         skipPromptLabel = skipPromptLabel(nativeSkipInterval?.type),
         skipPromptStartMs = ((nativeSkipInterval?.startTime ?: 0.0) * 1000).toLong().coerceAtLeast(0L),
@@ -547,8 +554,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             runtime = runtime,
             displayedPositionMs = displayedPositionMs,
             currentGestureFeedback = currentGestureFeedback,
-            p2pInitialLoadingMessage = p2pInitialLoadingMessage,
-            p2pInitialLoadingProgress = p2pInitialLoadingProgress,
+            p2pInitialLoadingMessage = null,
+            p2pInitialLoadingProgress = null,
             showP2pRebufferStats = showP2pRebufferStats,
             p2pRebufferMessage = p2pRebufferMessage,
             p2pRebufferProgress = p2pRebufferProgress,
@@ -580,7 +587,10 @@ private fun PlayerScreenRuntime.currentInitialPositionRequestKey(): String? {
 private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, isEpisode: Boolean) {
     val isInPip = rememberIsInPictureInPicture()
     AnimatedVisibility(
-        visible = (controlsVisible || showParentalGuide) && !playerControlsLocked && !isInPip,
+        visible = (controlsVisible || showParentalGuide) &&
+            !playerControlsLocked &&
+            !isInPip &&
+            !(playerSettingsUiState.showLoadingOverlay && !initialLoadCompleted && errorMessage == null),
         enter = fadeIn(),
         exit = fadeOut(),
     ) {

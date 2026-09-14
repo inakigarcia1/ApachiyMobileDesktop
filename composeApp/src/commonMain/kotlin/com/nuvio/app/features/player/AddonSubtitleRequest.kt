@@ -13,6 +13,12 @@ internal object AddonSubtitleRequest {
 
     fun shouldFallbackPostToGet(status: Int): Boolean = status !in 200..299
 
+    fun listingHasSubtitleUrls(body: String): Boolean {
+        val trimmed = body.trimStart()
+        if (!trimmed.startsWith("{")) return false
+        return trimmed.contains("\"url\"", ignoreCase = true)
+    }
+
     fun buildMultipartBody(reference: EmbeddedSubtitleReference): Pair<String, String> {
         val boundary = "----NuvioEmbedded${reference.bytes.size}${reference.filename.hashCode().toUInt()}"
         val safeName = reference.filename.substringAfterLast('/').ifBlank { "embedded.srt" }

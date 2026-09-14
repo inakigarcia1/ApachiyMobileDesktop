@@ -3,6 +3,7 @@ package com.nuvio.app.features.addons
 import com.nuvio.app.core.build.AppVersionPolicy
 import com.nuvio.app.core.network.ApachiyAddonAuthInterceptor
 import com.nuvio.app.core.network.DesktopIPv4FirstDns
+import com.nuvio.app.core.network.rewriteLocalDevUrl
 import com.nuvio.app.core.storage.DesktopStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.Json
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.network_empty_response_body
 import nuvio.composeapp.generated.resources.network_request_failed_http
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -53,6 +55,21 @@ internal object DesktopAddonHttpClientProvider {
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val rewritten = rewriteLocalDevUrl(original.url.toString())
+            if (rewritten.isNullOrBlank() || rewritten == original.url.toString()) {
+                chain.proceed(original)
+            } else {
+                val rewrittenHttp = rewritten.toHttpUrlOrNull()
+                    ?: rewritten.encodeUnsafeHttpUrlCharacters().toHttpUrlOrNull()
+                if (rewrittenHttp == null) {
+                    chain.proceed(original)
+                } else {
+                    chain.proceed(original.newBuilder().url(rewrittenHttp).build())
+                }
+            }
+        }
         .addInterceptor(ApachiyAddonAuthInterceptor())
         .addInterceptor { chain ->
             val request = chain.request()

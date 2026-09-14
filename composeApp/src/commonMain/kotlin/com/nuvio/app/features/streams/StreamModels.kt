@@ -1,6 +1,7 @@
 package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.network.rewriteLocalDevUrl
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import nuvio.composeapp.generated.resources.*
@@ -49,7 +50,9 @@ data class StreamItem(
      * a media URL in the Stremio SDK contract and must be opened externally.
      */
     val playableDirectUrl: String?
-        get() = directPlaybackUrl?.takeIf { !it.isMagnetLink() && !it.isTorrentSchemeUrl() }
+        get() = directPlaybackUrl
+            ?.takeIf { !it.isMagnetLink() && !it.isTorrentSchemeUrl() }
+            ?.let(::rewriteLocalDevUrl)
 
     val externalOpenUrl: String?
         get() = externalUrl

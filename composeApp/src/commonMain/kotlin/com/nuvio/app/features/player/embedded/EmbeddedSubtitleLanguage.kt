@@ -44,20 +44,21 @@ fun hasEmbeddedSpanishTextTrack(tracks: Collection<EmbeddedTextTrack>): Boolean 
     tracks.any { SubtitleLanguageMatching.isEmbeddedSpanishLanguage(it.language, it.name, null) }
 
 fun selectEmbeddedReferenceTrack(tracks: List<EmbeddedTextTrack>): EmbeddedTextTrack? {
-    val usable = tracks.filter { it.cues.isNotEmpty() }
-        .filterNot { SubtitleLanguageMatching.isEmbeddedSpanishLanguage(it.language, it.name, null) }
-    if (usable.isEmpty()) return null
+    val candidates = tracks.filter { track ->
+        track.cues.isNotEmpty() &&
+            !SubtitleLanguageMatching.isEmbeddedSpanishLanguage(track.language, track.name, null)
+    }
+    return candidates.firstOrNull { it.codec == EmbeddedTextCodec.SubRip }
+}
 
-    val english = usable.filter { isEmbeddedEnglishLanguage(it.language, it.name) }
-    val pool = english.ifEmpty { usable }
-    val nonForced = pool.filterNot { isForcedTextTrack(it.forced, it.language, it.name) }
-    val dialoguePool = nonForced.ifEmpty { pool }
-    val nonSdh = dialoguePool.filterNot { isSdhTextTrack(it.language, it.name) }
-    val ranked = (nonSdh.ifEmpty { dialoguePool }).sortedWith(
-        compareByDescending<EmbeddedTextTrack> { it.cues.size }
-            .thenBy { it.name.orEmpty() },
-    )
-    return ranked.firstOrNull()
+private const val MIN_REFERENCE_CUES = 24
+private const val MIN_REFERENCE_SPAN_MS = 5 * 60_000L
+
+fun isUsableEmbeddedReference(track: EmbeddedTextTrack): Boolean {
+    if (track.cues.size < MIN_REFERENCE_CUES) return false
+    val firstMs = track.cues.minOf { it.startMs }
+    val lastMs = track.cues.maxOf { it.startMs }
+    return lastMs - firstMs >= MIN_REFERENCE_SPAN_MS
 }
 
 fun EmbeddedTextTrack.toReference(): EmbeddedSubtitleReference {

@@ -4,6 +4,7 @@ import com.nuvio.app.core.i18n.localizedNoSubtitleLinesFound
 import com.nuvio.app.core.i18n.localizedSubtitleLinesLoadError
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
+import com.nuvio.app.features.player.embedded.selectPreferredSpanishAddonSubtitle
 import kotlinx.coroutines.launch
 
 internal fun PlayerScreenRuntime.applyAddonSubtitleUri(url: String) {
@@ -29,7 +30,8 @@ internal fun PlayerScreenRuntime.applyAddonSubtitleUri(url: String) {
 }
 
 internal fun PlayerScreenRuntime.fetchAddonSubtitlesForActiveItem() {
-    scope.launch {
+    subtitlePipelineJob?.cancel()
+    subtitlePipelineJob = scope.launch {
         fetchAddonSubtitlesPipeline()
     }
 }
@@ -48,10 +50,28 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline() {
         tryCompleteOpeningOverlay()
         return
     }
+    val sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders)
+    val extractSourceUrl = listOfNotNull(activeSourceUrl, p2pResolvedSourceUrl)
+        .firstOrNull { url ->
+            url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
+        } ?: activeSourceUrl
+    val identity = runCatching {
+        EmbeddedSubtitleExtractor.probeFileIdentity(
+            sourceUrl = extractSourceUrl,
+            headers = sourceHeaders,
+            declaredSize = activeVideoSize,
+        )
+    }.getOrNull()
+    val listingFilename = identity?.filename ?: activeTorrentFilename
+    val listingSize = identity?.sizeBytes ?: activeVideoSize
+    identity?.filename?.takeIf { it.isNotBlank() }?.let { activeTorrentFilename = it }
+    identity?.sizeBytes?.let { activeVideoSize = it }
+    autoFetchedAddonSubtitlesForKey = addonSubtitleFetchKey
     val extract = runCatching {
         EmbeddedSubtitleExtractor.extract(
-            sourceUrl = activeSourceUrl,
-            headers = sanitizePlaybackHeaders(activeSourceHeaders),
+            sourceUrl = extractSourceUrl,
+            headers = sourceHeaders,
+            videoSize = listingSize,
         )
     }.getOrNull()
     if (extract?.hasEmbeddedSpanish == true) {
@@ -64,12 +84,21 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline() {
         type = type,
         videoId = videoId,
         videoHash = activeVideoHash,
-        videoSize = activeVideoSize,
-        filename = activeTorrentFilename,
+        videoSize = listingSize,
+        filename = listingFilename,
         hasEmbeddedSpanish = false,
         reference = extract?.reference,
-        sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders),
+        sourceHeaders = sourceHeaders,
     ).join()
+    val selected = selectPreferredSpanishAddonSubtitle(SubtitleRepository.addonSubtitles.value)
+    if (selected != null && !isUserExplicitSubtitleSelection) {
+        selectedAddonSubtitleId = selected.id
+        selectedSubtitleIndex = -1
+        useCustomSubtitles = true
+        if (playerController != null) {
+            applyAddonSubtitleUri(selected.url)
+        }
+    }
     subtitlePipelineDone = true
     tryCompleteOpeningOverlay()
 }

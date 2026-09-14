@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.network.rewriteLocalDevUrl
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.AddonResource
@@ -59,6 +60,7 @@ object SubtitleRepository {
         hasEmbeddedSpanish: Boolean = false,
         reference: EmbeddedSubtitleReference? = null,
         sourceHeaders: Map<String, String> = emptyMap(),
+        preserveExisting: Boolean = false,
     ): Job {
         activeFetchJob?.cancel()
         activeFetchJob = scope.launch {
@@ -70,15 +72,19 @@ object SubtitleRepository {
             }
 
             val requestType = canonicalSubtitleType(type)
-            _isLoading.value = true
-            _error.value = null
-            _addonSubtitles.value = emptyList()
+            if (!preserveExisting) {
+                _isLoading.value = true
+                _error.value = null
+                _addonSubtitles.value = emptyList()
+            }
 
             val addons = AddonRepository.uiState.value.addons.enabledAddons()
             val subtitleAddons = addons.filter { addon ->
                 val manifest = addon.manifest ?: return@filter false
                 val subtitleResource = manifest.resources.find { it.name.isSubtitleResourceName() } ?: return@filter false
                 subtitleResource.supportsSubtitleType(requestType, videoId)
+            }.distinctBy { addon ->
+                addon.manifest?.id ?: addon.manifest?.transportUrl.orEmpty()
             }
 
             if (subtitleAddons.isEmpty()) {
@@ -120,7 +126,8 @@ object SubtitleRepository {
                                 val obj = element.jsonObject
                                 val id = obj.stringValue("id")
                                     ?: "${manifest.id}_${addonSubs.size}"
-                                val url = obj.stringValue("url") ?: continue
+                                val rawUrl = obj.stringValue("url") ?: continue
+                                val url = rewriteLocalDevUrl(rawUrl) ?: rawUrl
                                 val rawLang = obj.subtitleLanguage() ?: "unknown"
                                 val normalizedLang = normalizeLanguageCode(rawLang) ?: rawLang
 
@@ -141,7 +148,15 @@ object SubtitleRepository {
 
                             if (addonSubs.isNotEmpty()) {
                                 _addonSubtitles.update { currentSubtitles ->
-                                    currentSubtitles + addonSubs
+                                    val merged = if (preserveExisting) {
+                                        val incomingLanguages = addonSubs.map { it.language }.toSet()
+                                        currentSubtitles.filterNot { it.language in incomingLanguages } + addonSubs
+                                    } else {
+                                        currentSubtitles + addonSubs
+                                    }
+                                    merged.distinctBy { subtitle ->
+                                        "${subtitle.language}|${subtitle.url.substringBefore('?')}"
+                                    }
                                 }
                             }
                         } catch (error: Throwable) {
@@ -195,7 +210,10 @@ object SubtitleRepository {
                     )
                 }.getOrNull()
             }
-            if (posted != null && !AddonSubtitleRequest.shouldFallbackPostToGet(posted.status)) {
+            if (posted != null &&
+                !AddonSubtitleRequest.shouldFallbackPostToGet(posted.status) &&
+                AddonSubtitleRequest.listingHasSubtitleUrls(posted.body)
+            ) {
                 return posted.body
             }
         }

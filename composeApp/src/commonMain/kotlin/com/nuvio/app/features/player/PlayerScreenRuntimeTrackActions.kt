@@ -14,9 +14,6 @@ internal val PlayerScreenRuntime.addonSubtitleFetchKey: String?
         addons = addonsUiState.addons,
         type = activeAddonSubtitleType,
         videoId = activeVideoId,
-        videoHash = activeVideoHash,
-        videoSize = activeVideoSize,
-        filename = activeTorrentFilename,
     )
 
 internal val PlayerScreenRuntime.visibleAddonSubtitles: List<AddonSubtitle>

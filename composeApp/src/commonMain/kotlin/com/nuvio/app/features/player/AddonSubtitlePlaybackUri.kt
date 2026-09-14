@@ -1,5 +1,7 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.network.rewriteLocalDevUrl
+
 internal expect suspend fun prepareAddonSubtitlePlaybackUri(
     remoteUrl: String,
     sourceHeaders: Map<String, String> = emptyMap(),
@@ -14,15 +16,17 @@ internal suspend fun resolvePlaybackSubtitleUri(
     sourceHeaders: Map<String, String> = emptyMap(),
     cacheKey: String = remoteUrl,
 ): String? {
+    val playableUrl = rewriteLocalDevUrl(remoteUrl) ?: remoteUrl
     val prepared = prepareAddonSubtitlePlaybackUri(
-        remoteUrl = remoteUrl,
+        remoteUrl = playableUrl,
         sourceHeaders = sourceHeaders,
         cacheKey = cacheKey,
     )
     return when {
         prepared != null -> prepared
-        requiresAuthenticatedSubtitleDownload(remoteUrl) -> null
-        else -> remoteUrl
+        requiresAuthenticatedSubtitleDownload(playableUrl) ||
+            requiresAuthenticatedSubtitleDownload(remoteUrl) -> null
+        else -> playableUrl
     }
 }
 

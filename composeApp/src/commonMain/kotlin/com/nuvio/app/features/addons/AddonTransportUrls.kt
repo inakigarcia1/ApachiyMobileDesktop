@@ -1,7 +1,9 @@
 package com.nuvio.app.features.addons
 
+import com.nuvio.app.core.network.rewriteLocalDevUrl
+
 internal fun addonTransportBaseUrl(manifestUrl: String): String =
-    manifestUrl.substringBefore("?")
+    (rewriteLocalDevUrl(manifestUrl) ?: manifestUrl).substringBefore("?")
         .removeSuffix("/manifest.json")
         .encodeUnsafeHttpUrlCharacters()
 

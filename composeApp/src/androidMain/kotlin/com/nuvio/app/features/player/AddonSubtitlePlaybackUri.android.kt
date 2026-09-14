@@ -1,5 +1,6 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.network.rewriteLocalDevUrl
 import com.nuvio.app.features.addons.AddonHttpClientProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,7 +17,7 @@ internal actual suspend fun prepareAddonSubtitlePlaybackUri(
     sourceHeaders: Map<String, String>,
     cacheKey: String,
 ): String? = withContext(Dispatchers.IO) {
-    val resolvedUrl = remoteUrl
+    val resolvedUrl = rewriteLocalDevUrl(remoteUrl) ?: remoteUrl
     val parts = parseRawHttpUrlParts(resolvedUrl)
     val parsedUrl = parts?.toHttpUrlPreservingEncodedPath() ?: return@withContext null
     val bodyText = downloadSubtitleBody(parsedUrl, sourceHeaders) ?: return@withContext null

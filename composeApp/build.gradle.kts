@@ -71,6 +71,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     @get:Input
     abstract val avatarPublicBaseUrl: Property<String>
 
+    @get:Input
+    abstract val localDevEnabled: Property<Boolean>
+
     @TaskAction
     fun generate() {
         val props = Properties()
@@ -102,6 +105,15 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |object ApachiyConfig {
                 |    const val API_BASE_URL = "${apachiyApiBaseUrl.get()}"
                 |    const val AVATAR_PUBLIC_BASE_URL = "$resolvedAvatarPublicBaseUrl"
+                |}
+                """.trimMargin()
+            )
+            resolve("LocalDevConfig.kt").writeText(
+                """
+                |package com.nuvio.app.core.network
+                |
+                |object LocalDevConfig {
+                |    const val ENABLED = ${localDevEnabled.get()}
                 |}
                 """.trimMargin()
             )
@@ -621,10 +633,29 @@ val runtimeLocalProperties = Properties().apply {
     }
 }
 
-fun runtimeConfigValue(key: String, fallback: String = ""): String =
-    runtimeLocalProperties.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
+val useLocalDev = (
+    providers.gradleProperty("nuvio.useLocalDev").orNull
+        ?: System.getenv("APACHIY_USE_LOCAL_DEV")
+    )?.trim()?.let { value ->
+        value.equals("true", ignoreCase = true) || value == "1"
+    } ?: false
+
+val localDevProperties = Properties().apply {
+    val file = rootProject.file("local.dev.properties")
+    if (useLocalDev && file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun runtimeConfigValue(key: String, fallback: String = ""): String {
+    if (useLocalDev) {
+        localDevProperties.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        providers.environmentVariable(key).orNull?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+    }
+    return runtimeLocalProperties.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
         ?: providers.environmentVariable(key).orNull?.trim()?.takeIf { it.isNotBlank() }
         ?: fallback
+}
 
 fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
     when (runtimeConfigValue(key).lowercase()) {
@@ -645,10 +676,12 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
     apachiyApiBaseUrl.set(runtimeConfigValue("APACHIY_API_BASE_URL"))
     avatarPublicBaseUrl.set(runtimeConfigValue("AVATAR_PUBLIC_BASE_URL"))
+    localDevEnabled.set(useLocalDev)
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN"))
     sentryEnvironment.set(
         when {
+            useLocalDev -> "local"
             requestedGradleTasks.any { "benchmark" in it } -> "benchmark"
             requestedGradleTasks.any { "debug" in it } -> "debug"
             else -> "production"

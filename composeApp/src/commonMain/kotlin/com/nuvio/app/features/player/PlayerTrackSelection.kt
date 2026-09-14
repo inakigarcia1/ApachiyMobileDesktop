@@ -8,9 +8,6 @@ internal fun buildAddonSubtitleFetchKey(
     addons: List<ManagedAddon>,
     type: String?,
     videoId: String?,
-    videoHash: String? = null,
-    videoSize: Long? = null,
-    filename: String? = null,
 ): String? {
     val normalizedType = type?.takeIf { it.isNotBlank() } ?: return null
     val normalizedVideoId = videoId?.takeIf { it.isNotBlank() } ?: return null
@@ -33,9 +30,6 @@ internal fun buildAddonSubtitleFetchKey(
         append(normalizedVideoId)
         append('|')
         append(compatibleSubtitleAddons.sorted().joinToString("|"))
-        videoHash?.trim()?.takeIf { it.isNotBlank() }?.let { append("|hash=").append(it) }
-        videoSize?.takeIf { it > 0L }?.let { append("|size=").append(it) }
-        filename?.trim()?.takeIf { it.isNotBlank() }?.let { append("|file=").append(it) }
     }
 }
 

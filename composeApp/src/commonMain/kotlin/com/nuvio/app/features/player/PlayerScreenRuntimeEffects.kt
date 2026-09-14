@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -239,27 +240,37 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
     }
 
     LaunchedEffect(
-        activeSourceUrl,
         addonSubtitleFetchKey,
-        playerController,
-        playerControllerSourceUrl,
-        subtitleTracks,
+        activeSourceUrl,
     ) {
         val fetchKey = addonSubtitleFetchKey
-        if (SubtitleLanguageMatching.hasEmbeddedSpanishSubtitleTrack(subtitleTracks)) {
-            SubtitleRepository.clear()
-            subtitlePipelineDone = true
-            tryCompleteOpeningOverlay()
-            return@LaunchedEffect
-        }
         if (fetchKey == null) {
-            subtitlePipelineDone = true
-            tryCompleteOpeningOverlay()
+            if (addonsUiState.addons.isNotEmpty()) {
+                subtitlePipelineDone = true
+                tryCompleteOpeningOverlay()
+            }
             return@LaunchedEffect
         }
         if (autoFetchedAddonSubtitlesForKey == fetchKey) return@LaunchedEffect
         autoFetchedAddonSubtitlesForKey = fetchKey
         fetchAddonSubtitlesForActiveItem()
+    }
+
+    LaunchedEffect(activeSourceUrl, subtitlePipelineDone) {
+        subtitlePipelineWaitExpired = false
+        if (subtitlePipelineDone) return@LaunchedEffect
+        delay(AddonSubtitleLoadingGate.PIPELINE_WAIT_MS)
+        subtitlePipelineWaitExpired = true
+        tryCompleteOpeningOverlay()
+    }
+
+    LaunchedEffect(playerController, selectedAddonSubtitleId, useCustomSubtitles) {
+        val controller = playerController ?: return@LaunchedEffect
+        if (!useCustomSubtitles) return@LaunchedEffect
+        val selectedId = selectedAddonSubtitleId ?: return@LaunchedEffect
+        val subtitle = addonSubtitles.firstOrNull { it.id == selectedId || it.url == selectedId }
+            ?: return@LaunchedEffect
+        applyAddonSubtitleUri(subtitle.url)
     }
 
     LaunchedEffect(subtitleTracks) {

@@ -79,19 +79,22 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
 }
 
 internal fun PlayerScreenRuntime.resetOpeningOverlayForNewSource() {
+    subtitlePipelineJob?.cancel()
+    subtitlePipelineJob = null
     initialLoadCompleted = false
     subtitlePipelineDone = false
+    subtitlePipelineWaitExpired = false
     openingOverlayStartMark = TimeSource.Monotonic.markNow()
 }
 
 internal fun PlayerScreenRuntime.tryCompleteOpeningOverlay() {
     if (initialLoadCompleted) return
-    val elapsedMs = openingOverlayStartMark?.elapsedNow()?.inWholeMilliseconds ?: 0L
     if (
         AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
             playerIsLoading = playbackSnapshot.isLoading,
             pipelineDone = subtitlePipelineDone,
-            elapsedMs = elapsedMs,
+            playerBound = playerController != null,
+            waitExpired = subtitlePipelineWaitExpired,
         )
     ) {
         initialLoadCompleted = true

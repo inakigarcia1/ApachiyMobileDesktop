@@ -232,22 +232,24 @@ private fun NativePlayerSurface(
     }
 
     var coverNativeWhileLoading by remember { mutableStateOf(false) }
+    var initialPlaybackReady by remember(sourceUrl) { mutableStateOf(false) }
     LaunchedEffect(sourceUrl) {
         coverNativeWhileLoading = false
+        initialPlaybackReady = false
     }
     LaunchedEffect(controller) {
         while (true) {
             val snapshot = controller.snapshot()
             val nativeAttached = controller.hasAttachedPlayer()
-            val shouldCover = nativeAttached && snapshot.isLoading
             val shouldReveal = nativeAttached && !snapshot.isLoading && snapshot.durationMs > 0L
-            if (shouldCover) {
-                coverNativeWhileLoading = true
-            } else if (shouldReveal) {
+            if (shouldReveal) {
+                initialPlaybackReady = true
                 coverNativeWhileLoading = false
+            } else if (nativeAttached && snapshot.isLoading && !initialPlaybackReady) {
+                coverNativeWhileLoading = true
             }
             onSnapshot(snapshot)
-            delay(if (snapshot.isLoading || coverNativeWhileLoading) 50L else 500L)
+            delay(if (!initialPlaybackReady && (snapshot.isLoading || coverNativeWhileLoading)) 50L else 500L)
         }
     }
 

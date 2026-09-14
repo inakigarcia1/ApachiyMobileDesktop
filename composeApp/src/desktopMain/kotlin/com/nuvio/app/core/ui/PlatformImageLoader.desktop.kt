@@ -7,6 +7,7 @@ import com.nuvio.app.features.addons.DesktopAddonHttpClientProvider
 
 internal actual fun ImageLoader.Builder.configurePlatformImageLoader(): ImageLoader.Builder {
     return components {
+        add(LocalDevImageUrlMapper())
         add(
             OkHttpNetworkFetcherFactory(
                 callFactory = { DesktopAddonHttpClientProvider.get() },

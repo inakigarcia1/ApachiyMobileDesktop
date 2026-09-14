@@ -30,6 +30,24 @@ Variante **fullDebug** → `com.apachiy.app.debug`
 .\gradlew.bat :composeApp:packageReleaseMsi
 ```
 
+### Desktop contra backend local (sin tocar cloud)
+
+1. Copiá `local.dev.example.properties` → `local.dev.properties` (o usá el script, que lo crea solo).
+2. Ajustá URLs/puertos si tu `docker compose` usa otros.
+3. Levantá el stack local y ejecutá:
+
+```powershell
+.\scripts\run-desktop-local.ps1
+```
+
+Equivalente manual:
+
+```powershell
+.\gradlew.bat :composeApp:run -Pnuvio.useLocalDev=true
+```
+
+`local.properties` sigue apuntando a producción (`supabase.apachiy.org`, `api.apachiy.org`). Solo con el flag `nuvio.useLocalDev` (o `APACHIY_USE_LOCAL_DEV=1`) se aplican los overrides de `local.dev.properties`.
+
 En macOS/Linux también: `packageReleaseDmg`, `packageReleaseDeb`, etc.
 
 ## Tests

@@ -62,13 +62,20 @@ internal fun officialConfiguration() = ServerConfiguration(
 internal fun normalizeOfficialBackendUrl(raw: String): String {
     val trimmed = raw.trim().trimEnd('/')
     if (trimmed.isBlank()) return ""
-    val hostAndPath = when {
+
+    val withScheme = when {
         trimmed.startsWith("https://", ignoreCase = true) ||
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed.substringAfter("://")
+            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
         trimmed.contains("://") -> return trimmed
-        else -> trimmed
+        else -> "https://$trimmed"
     }
-    return "https://$hostAndPath"
+
+    // Local/private stacks (docker compose, emulator) often speak plain HTTP.
+    if (withScheme.startsWith("http://", ignoreCase = true) && !isPublicServerHost(withScheme)) {
+        return withScheme
+    }
+
+    return "https://${withScheme.substringAfter("://")}"
 }
 
 internal fun isPublicServerHost(url: String): Boolean {
