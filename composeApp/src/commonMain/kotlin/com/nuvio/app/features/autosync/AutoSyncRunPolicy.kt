@@ -31,6 +31,19 @@ internal fun effectiveAggressiveMode(
     storedAggressive: Boolean,
 ): Boolean = !operatorSettingsVisible || storedAggressive
 
+/** Debug builds honor the stored tolerance. Release builds always retime. */
+internal fun effectiveSyncToleranceMs(
+    operatorSettingsVisible: Boolean,
+    storedToleranceMs: Int,
+): Int = if (
+    operatorSettingsVisible &&
+    storedToleranceMs in AutoSyncPreferencesRepository.syncToleranceOptionsMs
+) {
+    storedToleranceMs
+} else {
+    0
+}
+
 internal enum class AutoSyncStartAction {
     RUN,
     ATTACH_ORIGINAL,

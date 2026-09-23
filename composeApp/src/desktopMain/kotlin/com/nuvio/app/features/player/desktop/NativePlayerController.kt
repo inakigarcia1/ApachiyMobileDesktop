@@ -1217,6 +1217,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("providerName", providerName)
         append(',')
+        appendJsonField("pauseOverlayEnabled", pauseOverlayEnabled)
+        append(',')
         appendJsonField("pauseOverlayWatchingLabel", pauseOverlayWatchingLabel)
         append(',')
         appendJsonField("pauseOverlayLogo", pauseOverlayLogo.orEmpty())

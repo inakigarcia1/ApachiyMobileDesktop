@@ -32,6 +32,7 @@ internal actual object PlatformLocalAccountDataCleaner {
         "selected_theme",
         "amoled_enabled",
         "show_loading_overlay",
+        "pause_overlay_enabled",
         "preferred_audio_language",
         "secondary_preferred_audio_language",
         "preferred_subtitle_language",

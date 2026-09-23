@@ -172,6 +172,7 @@ let state = {
   episodeText: "",
   streamTitle: "",
   providerName: "",
+  pauseOverlayEnabled: true,
   pauseOverlayWatchingLabel: "You're watching",
   pauseOverlayLogo: "",
   pauseOverlayEpisodeInfo: "",
@@ -2200,7 +2201,15 @@ const renderChrome = () => {
   root.classList.toggle("source-visible", Boolean(!showError && !isPlaying && !state.isLoading && (state.streamTitle || state.providerName)));
   syncHiddenCursor();
   const showOpening = renderOpeningOverlay(showError);
-  renderPauseMetadataOverlay(showOpening || showError);
+  if (state.pauseOverlayEnabled || showError) {
+    renderPauseMetadataOverlay(showOpening || showError);
+  } else {
+    window.clearTimeout(pauseMetadataTimer);
+    pauseMetadataTimer = 0;
+    pauseMetadataReady = false;
+    pauseMetadataOverlay.classList.remove("visible");
+    pauseMetadataOverlay.setAttribute("aria-hidden", "true");
+  }
   syncParentalGuide(showOpening || showError);
 
   title.textContent = state.title || "";
