@@ -105,7 +105,11 @@ object SupabaseProvider {
                     headers.append(HttpHeaders.UserAgent, userAgent)
                 }
             }
-            install(Auth)
+            install(Auth) {
+                createPlatformAuthSessionManager()?.let { manager ->
+                    sessionManager = manager
+                }
+            }
             install(Postgrest)
             install(Functions)
             install(Storage)

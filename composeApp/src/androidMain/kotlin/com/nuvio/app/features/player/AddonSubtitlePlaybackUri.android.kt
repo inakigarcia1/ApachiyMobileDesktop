@@ -18,8 +18,8 @@ internal actual suspend fun prepareAddonSubtitlePlaybackUri(
     cacheKey: String,
 ): String? = withContext(Dispatchers.IO) {
     val resolvedUrl = rewriteLocalDevUrl(remoteUrl) ?: remoteUrl
-    val parts = parseRawHttpUrlParts(resolvedUrl)
-    val parsedUrl = parts?.toHttpUrlPreservingEncodedPath() ?: return@withContext null
+    val parsedUrl = parseRawHttpUrlParts(resolvedUrl)?.toHttpUrlPreservingEncodedPath()
+        ?: return@withContext null
     val bodyText = downloadSubtitleBody(parsedUrl, sourceHeaders) ?: return@withContext null
     if (bodyText.trimStart().startsWith("{") || bodyText.trimStart().startsWith("[")) {
         return@withContext null
@@ -66,16 +66,13 @@ private fun downloadSubtitleBody(
                 requestBuilder.header(key, value)
             }
         }
-        val outcome = runCatching {
+        val body = runCatching {
             client.newCall(requestBuilder.build()).execute().use { response ->
-                val bytes = response.body?.bytes() ?: ByteArray(0)
-                Triple(response.code, response.isSuccessful, bytes)
+                if (!response.isSuccessful) return@use null
+                response.body?.bytes()?.takeIf { it.isNotEmpty() }
             }
-        }
-        val result = outcome.getOrNull()
-        if (result != null && result.second && result.third.isNotEmpty()) {
-            return result.third.toString(Charsets.UTF_8)
-        }
+        }.getOrNull()
+        if (body != null) return body.toString(Charsets.UTF_8)
     }
     return null
 }

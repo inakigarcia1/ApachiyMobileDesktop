@@ -657,6 +657,48 @@ fun runtimeConfigValue(key: String, fallback: String = ""): String {
         ?: fallback
 }
 
+val isAndroidAppGradleInvocation = gradle.startParameter.taskNames.any { taskName ->
+    val normalized = taskName.replace('\\', '/').lowercase()
+    normalized.contains(":androidapp:") || normalized.startsWith("androidapp:")
+}
+
+val androidEmulatorLoopbackHost = (
+    providers.gradleProperty("nuvio.android.localDevHost").orNull
+        ?: System.getenv("APACHIY_ANDROID_LOCAL_DEV_HOST")
+    )?.trim()?.takeIf { it.isNotBlank() } ?: "10.0.2.2"
+
+fun rewriteLoopbackHostToAndroidEmulator(url: String, emulatorHost: String): String {
+    val trimmed = url.trim()
+    if (trimmed.isEmpty()) return trimmed
+    return try {
+        val uri = URI(trimmed)
+        val host = uri.host ?: return trimmed
+        if (!host.equals("localhost", ignoreCase = true) && host != "127.0.0.1") {
+            return trimmed
+        }
+        URI(
+            uri.scheme,
+            uri.userInfo,
+            emulatorHost,
+            uri.port,
+            uri.rawPath,
+            uri.rawQuery,
+            uri.rawFragment,
+        ).toString()
+    } catch (_: Exception) {
+        trimmed
+    }
+}
+
+/** Local dev URLs in local.dev.properties use loopback; Android emulator builds need the host alias. */
+fun runtimeConfigUrl(key: String, fallback: String = ""): String {
+    val raw = runtimeConfigValue(key, fallback)
+    if (useLocalDev && isAndroidAppGradleInvocation) {
+        return rewriteLoopbackHostToAndroidEmulator(raw, androidEmulatorLoopbackHost)
+    }
+    return raw
+}
+
 fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
     when (runtimeConfigValue(key).lowercase()) {
         "1", "true", "yes", "y", "on" -> true
@@ -671,11 +713,11 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     appVersionCode.set(releaseAppVersionCode)
     desktopAppVersionName.set(desktopReleaseVersionName)
     desktopAppVersionCode.set(desktopReleaseVersionCode)
-    supabaseUrl.set(runtimeConfigValue("APACHIY_SUPABASE_URL"))
+    supabaseUrl.set(runtimeConfigUrl("APACHIY_SUPABASE_URL"))
     supabaseAnonKey.set(runtimeConfigValue("APACHIY_SUPABASE_ANON_KEY"))
-    supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
-    apachiyApiBaseUrl.set(runtimeConfigValue("APACHIY_API_BASE_URL"))
-    avatarPublicBaseUrl.set(runtimeConfigValue("AVATAR_PUBLIC_BASE_URL"))
+    supabaseFallbackUrl.set(runtimeConfigUrl("NUVIO_SUPABASE_FALLBACK_URL"))
+    apachiyApiBaseUrl.set(runtimeConfigUrl("APACHIY_API_BASE_URL"))
+    avatarPublicBaseUrl.set(runtimeConfigUrl("AVATAR_PUBLIC_BASE_URL"))
     localDevEnabled.set(useLocalDev)
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
     sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN"))
@@ -1425,6 +1467,10 @@ compose.desktop {
         mainClass = "com.nuvio.app.MainKt"
         val smokePlayerUrl = providers.gradleProperty("nuvio.desktop.smokePlayerUrl").orNull
             ?: System.getenv("NUVIO_DESKTOP_SMOKE_PLAYER_URL")
+        val agentQaFlag = providers.gradleProperty("apachiy.agentQa").orNull
+            ?: System.getenv("APACHIY_AGENT_QA")
+        val agentQaDir = providers.gradleProperty("apachiy.agentQaDir").orNull
+            ?: System.getenv("APACHIY_AGENT_QA_DIR")
         jvmArgs += listOfNotNull(
             "-Dapple.awt.application.appearance=NSAppearanceNameDarkAqua",
             // Keep AWT from loading its own GTK (Swing L&F/file dialogs): the
@@ -1436,6 +1482,11 @@ compose.desktop {
             "--add-opens=java.desktop/sun.awt.windows=ALL-UNNAMED",
             "--add-opens=java.desktop/sun.awt.X11=ALL-UNNAMED",
             smokePlayerUrl?.takeIf { it.isNotBlank() }?.let { "-Dnuvio.desktop.smokePlayerUrl=$it" },
+            agentQaFlag?.takeIf { it == "1" || it.equals("true", ignoreCase = true) }
+                ?.let { "-Dapachiy.agentQa=true" },
+            agentQaDir?.takeIf { it.isNotBlank() }?.let { dir ->
+                "-Dapachiy.agentQaDir=${dir.replace('\\', '/')}"
+            },
         )
 
         nativeDistributions {

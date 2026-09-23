@@ -12,6 +12,7 @@ import com.nuvio.app.features.debrid.DebridStreamPresentation
 import com.nuvio.app.features.debrid.LocalDebridAvailabilityService
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.agentqa.AgentQa
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.plugins.pluginContentId
 import com.nuvio.app.features.plugins.PluginsUiState
@@ -90,7 +91,15 @@ object StreamsRepository {
         if (
             !forceRefresh &&
             activeRequestKey == requestKey &&
-            (currentState.groups.isNotEmpty() || currentState.emptyStateReason != null || currentState.isAnyLoading)
+            currentState.isAnyLoading
+        ) {
+            log.d { "Skipping stream reload for unchanged request type=$type id=$videoId" }
+            return
+        }
+        if (
+            !forceRefresh &&
+            activeRequestKey == requestKey &&
+            currentState.groups.any { it.streams.isNotEmpty() }
         ) {
             log.d { "Skipping stream reload for unchanged request type=$type id=$videoId" }
             return
@@ -104,13 +113,19 @@ object StreamsRepository {
         val playerSettings = PlayerSettingsRepository.uiState.value
         val debridSettings = DebridSettingsRepository.snapshot()
         val streamBadgeRules = StreamBadgeSettingsRepository.snapshot()
-        val autoPlayMode = playerSettings.streamAutoPlayMode
+        val autoPlayMode = if (AgentQa.enabled && !manualSelection) {
+            StreamAutoPlayMode.FIRST_STREAM
+        } else {
+            playerSettings.streamAutoPlayMode
+        }
         val isAutoPlayEnabled = !manualSelection && autoPlayMode != StreamAutoPlayMode.MANUAL &&
             !(autoPlayMode == StreamAutoPlayMode.REGEX_MATCH &&
                 !StreamAutoPlayPolicy.isRegexSelectionConfigured(playerSettings.streamAutoPlayRegex))
 
         // Look up persisted binge group when both settings are enabled
-        val persistedBingeGroup = if (
+        val persistedBingeGroup = if (AgentQa.enabled) {
+            null
+        } else if (
             playerSettings.streamAutoPlayPreferBingeGroup &&
             playerSettings.streamAutoPlayReuseBingeGroup
         ) {
@@ -440,16 +455,37 @@ object StreamsRepository {
 
                     val displayName = addon.addonName
                     val group = runCatchingUnlessCancelled {
-                        val payload = fetchAddonResponseText(
+                        var payload = fetchAddonResponseText(
                             url = url,
                             forceRefresh = forceRefresh,
                         )
-                        StreamParser.parse(
+                        var streams = StreamParser.parse(
                             payload = payload,
                             addonName = displayName,
                             addonId = addon.addonId,
                             addonLogo = addon.manifest.logoUrl,
                         )
+                        if (AgentQa.enabled && streams.isEmpty()) {
+                            var waited = 0
+                            while (waited < 60_000 && _uiState.value.groups.none { it.streams.isNotEmpty() }) {
+                                delay(1_000)
+                                waited += 1_000
+                            }
+                            if (_uiState.value.groups.none { it.streams.isNotEmpty() }) {
+                                AgentQa.event("streams_reload", "empty_listing wait=60s")
+                                payload = fetchAddonResponseText(
+                                    url = url,
+                                    forceRefresh = true,
+                                )
+                                streams = StreamParser.parse(
+                                    payload = payload,
+                                    addonName = displayName,
+                                    addonId = addon.addonId,
+                                    addonLogo = addon.manifest.logoUrl,
+                                )
+                            }
+                        }
+                        streams
                     }.fold(
                         onSuccess = { streams ->
                             log.d { "Got ${streams.size} streams from ${displayName}" }

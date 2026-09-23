@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
+import com.nuvio.app.isIos
 import kotlinx.coroutines.withTimeoutOrNull
 
 object SubtitleForwarder {
@@ -25,40 +26,30 @@ object SubtitleForwarder {
         return try {
             withTimeoutOrNull(timeoutMs) {
                 val headers = sanitizePlaybackHeaders(sourceHeaders)
-                val identity = sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                    runCatching {
-                        EmbeddedSubtitleExtractor.probeFileIdentity(url, headers, videoSize)
-                    }.getOrNull()
+                val timing = if (isIos) {
+                    null
+                } else {
+                    sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                        runCatching {
+                            EmbeddedSubtitleExtractor.loadDialogueTiming(url, headers)
+                        }.getOrNull()
+                    }
                 }
-                val listingFilename = identity?.filename ?: filename
-                val listingSize = identity?.sizeBytes ?: videoSize
-                val extract = sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                    runCatching { EmbeddedSubtitleExtractor.extract(url, headers, listingSize) }.getOrNull()
-                }
-                if (extract?.hasEmbeddedSpanish == true) {
+                if (timing?.hasEmbeddedSpanish == true) {
                     return@withTimeoutOrNull emptyList()
                 }
-
-                SubtitleRepository.fetchAddonSubtitles(
+                val allSubtitles = SubtitleRepository.fetchApachiySubtitles(
                     type = type,
                     videoId = videoId,
                     videoHash = videoHash,
-                    videoSize = listingSize,
-                    filename = listingFilename,
-                    hasEmbeddedSpanish = false,
-                    reference = extract?.reference,
-                    sourceHeaders = headers,
-                ).join()
-
-                val allSubtitles = SubtitleRepository.addonSubtitles.value
-
-                val filtered = allSubtitles.filter { subtitle ->
+                    videoSize = videoSize,
+                    filename = filename,
+                )
+                allSubtitles.filter { subtitle ->
                     languageMatchesPreference(subtitle.language, preferredLanguage) ||
                         (secondaryLanguage != null &&
                             languageMatchesPreference(subtitle.language, secondaryLanguage))
-                }
-
-                filtered.map { subtitle ->
+                }.map { subtitle ->
                     SubtitleInput(
                         url = subtitle.url,
                         name = subtitle.display,

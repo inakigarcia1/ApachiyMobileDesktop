@@ -50,4 +50,36 @@ class LocalDevUrlRewriterTest {
         val url = "https://image.tmdb.org/t/p/w500/poster.jpg"
         assertEquals(url, rewriteEmulatorLoopbackUrl(url, API_ORIGIN))
     }
+
+    @Test
+    fun downgradesEmulatorHttpsOnPlainHttpPorts() {
+        assertEquals(
+            "http://10.0.2.2:10050/subtitles/download/abc",
+            downgradeEmulatorPlaintextScheme("https://10.0.2.2:10050/subtitles/download/abc"),
+        )
+        assertEquals(
+            "https://10.0.2.2:10051/apachiy/subtitles/proxy/token",
+            downgradeEmulatorPlaintextScheme("https://10.0.2.2:10051/apachiy/subtitles/proxy/token"),
+        )
+        assertEquals(
+            "http://10.0.2.2:10050/subtitles/download/abc",
+            downgradeEmulatorPlaintextScheme("http://10.0.2.2:10050/subtitles/download/abc"),
+        )
+    }
+
+    @Test
+    fun rewritesLoopbackHostToEmulatorAlias() {
+        assertEquals(
+            "http://10.0.2.2:8000/auth/v1/token",
+            rewriteHostLoopbackToEmulator("http://localhost:8000/auth/v1/token"),
+        )
+        assertEquals(
+            "http://10.0.2.2:10050/metadata-ai/img",
+            rewriteHostLoopbackToEmulator("http://127.0.0.1:10050/metadata-ai/img"),
+        )
+        assertEquals(
+            "https://localhost.example.com:10050/api",
+            rewriteHostLoopbackToEmulator("https://localhost.example.com:10050/api"),
+        )
+    }
 }

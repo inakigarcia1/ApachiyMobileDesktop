@@ -62,7 +62,6 @@ object DeviceRegistrar {
                         registerNow()
                     } else {
                         _initialRegistrationCompleted.value = false
-                        SyncClientIdentity.clearRegisteredDeviceId()
                     }
                 }
         }

@@ -3,28 +3,64 @@ package com.nuvio.app.features.player
 import com.nuvio.app.core.i18n.localizedNoSubtitleLinesFound
 import com.nuvio.app.core.i18n.localizedSubtitleLinesLoadError
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
-import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
+import com.nuvio.app.features.player.agentqa.AgentQa
 import com.nuvio.app.features.player.embedded.selectPreferredSpanishAddonSubtitle
+import com.nuvio.app.isIos
 import kotlinx.coroutines.launch
 
 internal fun PlayerScreenRuntime.applyAddonSubtitleUri(url: String) {
+    val prepared = preparedAddonSubtitlePlaybackUri
+    val readyController = playerController
+    if (prepared != null && readyController != null) {
+        readyController.selectSubtitleTrack(-1)
+        readyController.setSubtitleUri(prepared)
+        appliedAddonSubtitleUrl = url
+        launchCommunityAutoSync(url)
+        agentQaPipeline = "applied"
+        AgentQa.event("pipeline", "applied")
+        publishAgentQaSnapshot()
+        return
+    }
+    if (addonSubtitleApplyInFlightUrl == url) {
+        return
+    }
+    addonSubtitleApplyInFlightUrl = url
     scope.launch {
-        val cacheKey = buildAddonSubtitleCacheKey(
-            remoteUrl = url,
-            videoHash = activeVideoHash,
-            videoSize = activeVideoSize,
-            filename = activeTorrentFilename,
-        )
-        val resolved = resolvePlaybackSubtitleUri(
-            remoteUrl = url,
-            sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders),
-            cacheKey = cacheKey,
-        )
-        val controller = playerController
-        if (controller == null) return@launch
-        controller.selectSubtitleTrack(-1)
-        if (resolved != null) {
-            controller.setSubtitleUri(resolved)
+        try {
+            val cacheKey = buildAddonSubtitleCacheKey(
+                remoteUrl = url,
+                videoHash = activeVideoHash,
+                videoSize = activeVideoSize,
+                filename = activeTorrentFilename,
+            )
+            agentQaCacheKey = cacheKey
+            val resolved = resolvePlaybackSubtitleUri(
+                remoteUrl = url,
+                sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders),
+                cacheKey = cacheKey,
+            )
+            val controller = playerController
+            if (controller == null) return@launch
+            controller.selectSubtitleTrack(-1)
+            if (resolved != null) {
+                controller.setSubtitleUri(resolved)
+                appliedAddonSubtitleUrl = url
+                launchCommunityAutoSync(url)
+                if (AgentQa.enabled) {
+                    captureAppliedSubtitleForAgentQa(url)
+                }
+                agentQaPipeline = "applied"
+                AgentQa.event("pipeline", "applied")
+            } else {
+                agentQaPipeline = "failed"
+                agentQaSkipReason = agentQaSkipReason ?: "subtitle_download_failed"
+                AgentQa.event("pipeline", "subtitle_download_failed")
+            }
+            publishAgentQaSnapshot()
+        } finally {
+            if (addonSubtitleApplyInFlightUrl == url) {
+                addonSubtitleApplyInFlightUrl = null
+            }
         }
     }
 }
@@ -40,67 +76,103 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline() {
     val type = activeAddonSubtitleType.takeIf { it.isNotBlank() }
     val videoId = activeVideoId?.takeIf { it.isNotBlank() }
     if (type == null || videoId == null) {
-        subtitlePipelineDone = true
-        tryCompleteOpeningOverlay()
+        finishAgentQaPipeline(skipReason = "missing_ids")
         return
     }
     if (SubtitleLanguageMatching.hasEmbeddedSpanishSubtitleTrack(subtitleTracks)) {
         SubtitleRepository.clear()
-        subtitlePipelineDone = true
-        tryCompleteOpeningOverlay()
+        agentQaHasEmbeddedSpanish = true
+        finishAgentQaPipeline(skipReason = "embedded_spanish")
         return
     }
     val sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders)
-    val extractSourceUrl = listOfNotNull(activeSourceUrl, p2pResolvedSourceUrl)
-        .firstOrNull { url ->
-            url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
-        } ?: activeSourceUrl
-    val identity = runCatching {
-        EmbeddedSubtitleExtractor.probeFileIdentity(
-            sourceUrl = extractSourceUrl,
-            headers = sourceHeaders,
-            declaredSize = activeVideoSize,
-        )
-    }.getOrNull()
-    val listingFilename = identity?.filename ?: activeTorrentFilename
-    val listingSize = identity?.sizeBytes ?: activeVideoSize
-    identity?.filename?.takeIf { it.isNotBlank() }?.let { activeTorrentFilename = it }
-    identity?.sizeBytes?.let { activeVideoSize = it }
     autoFetchedAddonSubtitlesForKey = addonSubtitleFetchKey
-    val extract = runCatching {
-        EmbeddedSubtitleExtractor.extract(
-            sourceUrl = extractSourceUrl,
-            headers = sourceHeaders,
-            videoSize = listingSize,
-        )
-    }.getOrNull()
-    if (extract?.hasEmbeddedSpanish == true) {
-        SubtitleRepository.clear()
-        subtitlePipelineDone = true
-        tryCompleteOpeningOverlay()
-        return
+    if (!isIos) {
+        val timing = loadDialogueTimingIndex()
+        if (timing.hasEmbeddedSpanish) {
+            SubtitleRepository.clear()
+            agentQaHasEmbeddedSpanish = true
+            finishAgentQaPipeline(skipReason = "embedded_spanish")
+            return
+        }
     }
-    SubtitleRepository.fetchAddonSubtitles(
+
+    agentQaPipeline = "fetching"
+    AgentQa.event("pipeline", agentQaPipeline)
+    val addonSubs = SubtitleRepository.fetchApachiySubtitles(
         type = type,
         videoId = videoId,
         videoHash = activeVideoHash,
-        videoSize = listingSize,
-        filename = listingFilename,
-        hasEmbeddedSpanish = false,
-        reference = extract?.reference,
-        sourceHeaders = sourceHeaders,
-    ).join()
-    val selected = selectPreferredSpanishAddonSubtitle(SubtitleRepository.addonSubtitles.value)
-    if (selected != null && !isUserExplicitSubtitleSelection) {
-        selectedAddonSubtitleId = selected.id
-        selectedSubtitleIndex = -1
-        useCustomSubtitles = true
-        if (playerController != null) {
-            applyAddonSubtitleUri(selected.url)
+        videoSize = activeVideoSize,
+        filename = activeTorrentFilename,
+    )
+    AgentQa.event(
+        "addon_subs",
+        "n=${addonSubs.size} langs=${addonSubs.joinToString(",") { it.language }}",
+    )
+
+    val selected = if (isUserExplicitSubtitleSelection) {
+        null
+    } else {
+        selectPreferredSpanishAddonSubtitle(addonSubs)
+    }
+    if (selected != null) {
+        val resolved = resolvePlaybackSubtitleUri(
+            remoteUrl = selected.url,
+            sourceHeaders = sourceHeaders,
+            cacheKey = buildAddonSubtitleCacheKey(
+                remoteUrl = selected.url,
+                videoHash = activeVideoHash,
+                videoSize = activeVideoSize,
+                filename = activeTorrentFilename,
+            ),
+        )
+        if (resolved != null) {
+            preparedAddonSubtitlePlaybackUri = resolved
+            preferredSubtitleSelectionApplied = true
+            selectedAddonSubtitleId = selected.id
+            selectedSubtitleIndex = -1
+            useCustomSubtitles = true
+            agentQaCacheKey = buildAddonSubtitleCacheKey(
+                remoteUrl = selected.url,
+                videoHash = activeVideoHash,
+                videoSize = activeVideoSize,
+                filename = activeTorrentFilename,
+            )
+            if (playerController != null) {
+                applyAddonSubtitleUri(selected.url)
+            } else {
+                agentQaPipeline = "waiting_player"
+            }
         }
     }
     subtitlePipelineDone = true
     tryCompleteOpeningOverlay()
+    publishAgentQaSnapshot()
+}
+
+private fun PlayerScreenRuntime.finishAgentQaPipeline(
+    skipReason: String,
+    donePipeline: String = "skipped",
+) {
+    agentQaSkipReason = skipReason
+    agentQaPipeline = donePipeline
+    subtitlePipelineDone = true
+    AgentQa.event("pipeline", skipReason)
+    tryCompleteOpeningOverlay()
+    publishAgentQaSnapshot()
+}
+
+private suspend fun PlayerScreenRuntime.captureAppliedSubtitleForAgentQa(url: String) {
+    val body = runCatching {
+        httpGetTextWithHeaders(
+            url = url,
+            headers = sanitizePlaybackHeaders(activeSourceHeaders),
+        )
+    }.getOrNull() ?: return
+    AgentQa.writeBytes("applied.srt", body.encodeToByteArray())
+    agentQaAppliedCues = PlayerSubtitleCueParser.parse(body, url)
+    refreshAgentQaSyncScore()
 }
 
 internal fun PlayerScreenRuntime.setSubtitleDelay(delayMs: Int) {

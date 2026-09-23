@@ -121,46 +121,67 @@ object RemoteLogoutWatcher {
         delay(REGISTRATION_GRACE_PERIOD_MS)
         var consecutiveMisses = 0
         while (true) {
-            val installationId = SyncClientIdentity.currentClientId()
-            val stillRegistered = stillRegisteredOnApi(installationId)
-            if (stillRegistered) {
-                consecutiveMisses = 0
-            } else {
-                consecutiveMisses++
-                if (consecutiveMisses >= REQUIRED_CONSECUTIVE_MISSES) {
-                    log.w { "device missing from API list after $consecutiveMisses polls; signing out" }
+            when (val presence = devicePresenceOnApi()) {
+                DevicePresence.Registered -> consecutiveMisses = 0
+                DevicePresence.ExplicitlyRevoked -> {
+                    log.w { "device explicitly revoked on API; signing out" }
                     AuthRepository.signOut()
                     return
+                }
+                DevicePresence.Missing -> {
+                    consecutiveMisses++
+                    // Missing from the list is often a transient API / registration race.
+                    // Re-register instead of wiping the Supabase session (which forced
+                    // users back to the login screen on desktop).
+                    if (consecutiveMisses == 1 || consecutiveMisses % 3 == 0) {
+                        log.w { "device missing from API list (miss=$consecutiveMisses); re-registering" }
+                        DeviceRegistrar.requestForegroundRegistration()
+                    }
+                }
+                DevicePresence.Unknown -> {
+                    // Network / decode issues: do not escalate toward logout.
                 }
             }
             delay(LIST_POLL_INTERVAL_MS)
         }
     }
 
-    private suspend fun stillRegisteredOnApi(installationId: String): Boolean {
-        if (ApachiyConfig.API_BASE_URL.isBlank()) return true
+    private suspend fun devicePresenceOnApi(): DevicePresence {
+        if (ApachiyConfig.API_BASE_URL.isBlank()) return DevicePresence.Registered
         val token = runCatching {
             SupabaseProvider.client.auth.currentAccessTokenOrNull()
-        }.getOrNull() ?: return true
+        }.getOrNull() ?: return DevicePresence.Unknown
         return runCatching {
             val response = ApachiyDeviceApi.getDevices(token)
             val registeredDeviceId = SyncClientIdentity.loadRegisteredDeviceId()
             when (response.status) {
-                410, 423 -> return@runCatching false
-                401, 403 -> return@runCatching true
-                !in 200..299 -> return@runCatching true
+                410, 423 -> return@runCatching DevicePresence.ExplicitlyRevoked
+                401, 403 -> return@runCatching DevicePresence.Unknown
+                !in 200..299 -> return@runCatching DevicePresence.Unknown
             }
-            val rows = ApachiyDeviceApi.decodeDeviceList(response.body) ?: return@runCatching true
+            val rows = ApachiyDeviceApi.decodeDeviceList(response.body)
+                ?: return@runCatching DevicePresence.Unknown
+            val installationId = SyncClientIdentity.currentClientId()
             val matchesInstallation = rows.any {
                 it.resolvedInstallationId.equals(installationId, ignoreCase = true)
             }
             val matchesDeviceId = registeredDeviceId != null &&
                 rows.any { it.resolvedDeviceId == registeredDeviceId }
-            matchesInstallation || matchesDeviceId
-        }.getOrDefault(true)
+            if (matchesInstallation || matchesDeviceId) {
+                DevicePresence.Registered
+            } else {
+                DevicePresence.Missing
+            }
+        }.getOrDefault(DevicePresence.Unknown)
+    }
+
+    private enum class DevicePresence {
+        Registered,
+        Missing,
+        ExplicitlyRevoked,
+        Unknown,
     }
 
     private const val REGISTRATION_GRACE_PERIOD_MS = 8_000L
     private const val LIST_POLL_INTERVAL_MS = 12_000L
-    private const val REQUIRED_CONSECUTIVE_MISSES = 3
 }

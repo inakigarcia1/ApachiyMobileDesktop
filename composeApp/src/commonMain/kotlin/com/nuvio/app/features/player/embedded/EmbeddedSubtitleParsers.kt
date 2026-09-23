@@ -11,6 +11,7 @@ internal object MkvTextSubtitleParser {
     private const val ID_FLAG_FORCED = 0x55AAL
     private const val ID_NAME = 0x536EL
     private const val ID_LANGUAGE = 0x22B59CL
+    private const val ID_LANGUAGE_IETF = 0x22B59DL
     private const val ID_CODEC_PRIVATE = 0x63A2L
     private const val ID_CLUSTER = 0x1F43B675L
     private const val ID_TIMESTAMP = 0xE7L
@@ -44,6 +45,7 @@ internal object MkvTextSubtitleParser {
         var timestampScale = 1_000_000L
         var segmentDataOffset = 0L
         var cuesRelative: Long? = null
+        var tracksRelative: Long? = null
 
         while (offset < data.size) {
             val header = readElementHeader(data, offset) ?: break
@@ -58,18 +60,38 @@ internal object MkvTextSubtitleParser {
                 val meta = parseSegment(data, contentStart, size, tracks, timestampScale)
                 timestampScale = meta.timestampScale
                 cuesRelative = meta.cuesRelativeOffset
+                tracksRelative = meta.tracksRelativeOffset
                 break
             }
             offset = skipOrEnd(contentStart, size, data.size)
         }
 
         val cuesOffset = cuesRelative?.let { relative -> segmentDataOffset + relative }
+        val tracksOffset = tracksRelative?.let { relative -> segmentDataOffset + relative }
         return MkvLayout(
             tracks = tracks.values.mapNotNull { track -> toTextTrack(track) },
             timestampScale = timestampScale.coerceAtLeast(1L),
             segmentDataOffset = segmentDataOffset,
             cuesOffset = cuesOffset,
+            tracksOffset = tracksOffset,
         )
+    }
+
+    fun parseTracksElement(data: ByteArray): List<EmbeddedTextTrack> {
+        if (data.size < 4) return emptyList()
+        val tracks = mutableMapOf<Long, MutableTrack>()
+        val header = readElementHeader(data, 0)
+        val payloadStart: Int
+        val payloadSize: Long
+        if (header?.id == ID_TRACKS) {
+            payloadStart = header.headerSize
+            payloadSize = header.size
+        } else {
+            payloadStart = 0
+            payloadSize = data.size.toLong()
+        }
+        parseTracks(data, payloadStart, payloadSize, tracks)
+        return tracks.values.mapNotNull { track -> toTextTrack(track) }
     }
 
     fun parseCues(data: ByteArray): List<MkvCueRef> {
@@ -97,6 +119,14 @@ internal object MkvTextSubtitleParser {
             offset = contentEnd
         }
         return refs
+    }
+
+    fun cuesElementTotalBytes(headerPrefix: ByteArray): Int? {
+        val header = readElementHeader(headerPrefix, 0) ?: return null
+        if (header.id != ID_CUES) return null
+        val total = header.headerSize.toLong() + header.size
+        if (total <= 0L || total > 32L * 1024 * 1024) return null
+        return total.toInt()
     }
 
     fun harvestClusterWindow(
@@ -268,6 +298,7 @@ internal object MkvTextSubtitleParser {
     private class SegmentMeta(
         var timestampScale: Long,
         var cuesRelativeOffset: Long? = null,
+        var tracksRelativeOffset: Long? = null,
     )
 
     private fun parseSegment(
@@ -286,11 +317,15 @@ internal object MkvTextSubtitleParser {
             val contentStart = offset + headerSize
             when (id) {
                 ID_SEEK_HEAD -> {
-                    val cuesRel = parseSeekHead(data, contentStart, elemSize)
-                    if (cuesRel != null) meta.cuesRelativeOffset = cuesRel
+                    val seeks = parseSeekHead(data, contentStart, elemSize)
+                    if (seeks.cuesRelative != null) meta.cuesRelativeOffset = seeks.cuesRelative
+                    if (seeks.tracksRelative != null) meta.tracksRelativeOffset = seeks.tracksRelative
                 }
                 ID_INFO -> meta.timestampScale = parseInfo(data, contentStart, elemSize, meta.timestampScale)
-                ID_TRACKS -> parseTracks(data, contentStart, elemSize, tracks)
+                ID_TRACKS -> {
+                    meta.tracksRelativeOffset = (offset - start).toLong()
+                    parseTracks(data, contentStart, elemSize, tracks)
+                }
                 ID_CLUSTER -> parseCluster(data, contentStart, elemSize, tracks, meta.timestampScale)
             }
             offset = skipOrEnd(contentStart, elemSize, end)
@@ -298,10 +333,16 @@ internal object MkvTextSubtitleParser {
         return meta
     }
 
-    private fun parseSeekHead(data: ByteArray, start: Int, size: Long): Long? {
+    private data class SeekTargets(
+        val cuesRelative: Long? = null,
+        val tracksRelative: Long? = null,
+    )
+
+    private fun parseSeekHead(data: ByteArray, start: Int, size: Long): SeekTargets {
         var offset = start
         val end = elementEnd(start, size, data.size)
         var cuesRelative: Long? = null
+        var tracksRelative: Long? = null
         while (offset < end) {
             val header = readElementHeader(data, offset) ?: break
             val contentStart = offset + header.headerSize
@@ -320,13 +361,16 @@ internal object MkvTextSubtitleParser {
                     }
                     inner = innerEnd
                 }
-                if (seekId == ID_CUES && seekPosition >= 0) {
-                    cuesRelative = seekPosition
+                if (seekPosition >= 0) {
+                    when (seekId) {
+                        ID_CUES -> cuesRelative = seekPosition
+                        ID_TRACKS -> tracksRelative = seekPosition
+                    }
                 }
             }
             offset = contentEnd
         }
-        return cuesRelative
+        return SeekTargets(cuesRelative, tracksRelative)
     }
 
     private fun parseInfo(data: ByteArray, start: Int, size: Long, fallback: Long): Long {
@@ -383,7 +427,10 @@ internal object MkvTextSubtitleParser {
                 ID_TRACK_NUMBER -> number = readUnsigned(data, contentStart, elemSize.toInt())
                 ID_TRACK_TYPE -> type = readUnsigned(data, contentStart, elemSize.toInt())
                 ID_CODEC_ID -> codecId = data.decodeString(contentStart, contentEnd)
-                ID_LANGUAGE -> language = data.decodeString(contentStart, contentEnd)
+                ID_LANGUAGE -> if (language.isNullOrBlank()) {
+                    language = data.decodeString(contentStart, contentEnd)
+                }
+                ID_LANGUAGE_IETF -> language = data.decodeString(contentStart, contentEnd)
                 ID_NAME -> name = data.decodeString(contentStart, contentEnd)
                 ID_FLAG_FORCED -> forced = readUnsigned(data, contentStart, elemSize.toInt()) != 0L
                 ID_CODEC_PRIVATE -> codecPrivate = data.copyOfRange(contentStart, contentEnd)
@@ -517,13 +564,17 @@ internal object MkvTextSubtitleParser {
 }
 
 internal object Mp4TextSubtitleParser {
-    fun parse(data: ByteArray): List<EmbeddedTextTrack> {
+    fun parse(data: ByteArray): List<EmbeddedTextTrack> = parse(data, timingOnly = false)
+
+    fun parseTiming(data: ByteArray): List<EmbeddedTextTrack> = parse(data, timingOnly = true)
+
+    private fun parse(data: ByteArray, timingOnly: Boolean): List<EmbeddedTextTrack> {
         if (data.size < 8 || !hasFtyp(data)) return emptyList()
         val moov = findBox(data, 0, data.size, "moov") ?: return emptyList()
         val tracks = mutableListOf<EmbeddedTextTrack>()
         visitBoxes(data, moov.start, moov.end) { type, start, end ->
             if (type == "trak") {
-                parseTrak(data, start, end)?.let(tracks::add)
+                parseTrak(data, start, end, timingOnly)?.let(tracks::add)
             }
         }
         return tracks
@@ -534,7 +585,7 @@ internal object Mp4TextSubtitleParser {
         return boxType(data, 0) == "ftyp" || boxType(data, 0) == "moov"
     }
 
-    private fun parseTrak(data: ByteArray, start: Int, end: Int): EmbeddedTextTrack? {
+    private fun parseTrak(data: ByteArray, start: Int, end: Int, timingOnly: Boolean = false): EmbeddedTextTrack? {
         val mdia = findBox(data, start, end, "mdia") ?: return null
         val hdlr = findBox(data, mdia.start, mdia.end, "hdlr") ?: return null
         if (hdlr.end - hdlr.start < 16) return null
@@ -547,7 +598,8 @@ internal object Mp4TextSubtitleParser {
         val stsd = findBox(data, stbl.start, stbl.end, "stsd") ?: return null
         val codec = detectTx3g(data, stsd.start, stsd.end) ?: return null
         val language = elngOrMdhdLanguage(data, mdia.start, mdia.end, mdhd)
-        val samples = readTextSamples(data, stbl.start, stbl.end, timescale)
+        val emptyMax = if (codec == EmbeddedTextCodec.WebVtt) 8 else 2
+        val samples = readTextSamples(data, stbl.start, stbl.end, timescale, timingOnly, emptyMax)
         if (samples.isEmpty()) return null
         return EmbeddedTextTrack(
             language = language,
@@ -590,6 +642,8 @@ internal object Mp4TextSubtitleParser {
         stblStart: Int,
         stblEnd: Int,
         timescale: Int,
+        timingOnly: Boolean = false,
+        emptyMax: Int = 2,
     ): List<EmbeddedSubtitleCue> {
         val stsz = findBox(data, stblStart, stblEnd, "stsz") ?: return emptyList()
         val stco = findBox(data, stblStart, stblEnd, "stco") ?: findBox(data, stblStart, stblEnd, "co64")
@@ -607,6 +661,17 @@ internal object Mp4TextSubtitleParser {
         val count = minOf(sizes.size, offsets.size, durations.size)
         for (i in 0 until count) {
             val size = sizes[i]
+            if (timingOnly) {
+                if (size <= emptyMax) {
+                    dts += durations[i]
+                    continue
+                }
+                val startMs = dts * 1000 / timescale
+                val endMs = startMs + (durations[i] * 1000 / timescale).coerceAtLeast(1)
+                cues += EmbeddedSubtitleCue(startMs, endMs, "")
+                dts += durations[i]
+                continue
+            }
             val offset = offsets[i].toInt()
             if (size <= 0 || offset < 0 || offset + size > data.size) {
                 dts += durations[i]

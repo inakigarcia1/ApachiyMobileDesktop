@@ -43,4 +43,17 @@ class AuthPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun expiredAccessTokenIsRecoverableAndNotADefinitiveAccountLoss() {
+        val expired = RuntimeException("JWT expired")
+        assertTrue(isLikelyExpiredAccessTokenError(expired))
+        assertFalse(isDefinitiveInvalidAccountError(expired))
+    }
+
+    @Test
+    fun deletedUserIsADefinitiveAccountLoss() {
+        val deleted = RuntimeException("User from sub claim in JWT does not exist")
+        assertTrue(isDefinitiveInvalidAccountError(deleted))
+    }
 }

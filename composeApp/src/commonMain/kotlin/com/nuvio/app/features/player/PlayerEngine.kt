@@ -32,6 +32,20 @@ interface PlayerEngineController {
         useCustomSubtitles: Boolean = false,
     ) {}
     fun setSubtitleDelayMs(delayMs: Int) {}
+
+    /**
+     * Android ExoPlayer runs the embedded-track matcher itself and returns true.
+     * Other engines return false and the caller retimes, then [replaceExternalSubtitleBody].
+     */
+    fun runSelectedAutoSync(
+        sourceUrl: String,
+        sourceHeaders: Map<String, String>,
+        subtitleUrl: String,
+        subtitleHeaders: Map<String, String>,
+    ): Boolean = false
+
+    /** Replaces the external subtitle already on screen with [body], without reloading the video. */
+    fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean = false
     fun configureIosVideoOutput(settings: PlayerSettingsUiState) {}
     fun updateNowPlayingMetadata(info: PlayerNowPlayingInfo) {}
     fun clearNowPlayingInfo() {}

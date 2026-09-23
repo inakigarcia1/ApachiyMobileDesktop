@@ -51,6 +51,7 @@ import com.nuvio.app.features.membership.MemberAccessRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.player.agentqa.BindAgentQaAppEffects
 import com.nuvio.app.features.profiles.AvatarRepository
 import com.nuvio.app.features.profiles.NuvioProfile
 import com.nuvio.app.features.profiles.ProfileEditScreen
@@ -494,6 +495,8 @@ internal fun AppGate(
                 overlaysHidden,
         )
     }
+
+    BindAgentQaAppEffects(gateScreen)
 
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedContent(

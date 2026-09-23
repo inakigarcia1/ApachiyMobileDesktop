@@ -291,6 +291,37 @@ class StreamAutoPlaySelectorTest {
         assertEquals(stream, selected)
     }
 
+    @Test
+    fun `identity mismatch skips season-pack file for another episode`() {
+        assertFalse(
+            StreamAutoPlaySelector.identityMatchesRequestedEpisode(
+                season = 1,
+                episode = 3,
+                identityFilename = "Smallville_S10E21_x265_720p_BluRay_30nama_30NAMA.mkv",
+                identitySizeBytes = 537_455_443,
+                advertisedSizeBytes = 280_632_041,
+            ),
+        )
+        assertTrue(
+            StreamAutoPlaySelector.identityMatchesRequestedEpisode(
+                season = 1,
+                episode = 3,
+                identityFilename = "Smallville_S01E03_Hothead.mkv",
+                identitySizeBytes = 298_604_881,
+                advertisedSizeBytes = 298_604_881,
+            ),
+        )
+        assertFalse(
+            StreamAutoPlaySelector.identityMatchesRequestedEpisode(
+                season = 1,
+                episode = 3,
+                identityFilename = "pack.mkv",
+                identitySizeBytes = 537_455_443,
+                advertisedSizeBytes = 280_632_041,
+            ),
+        )
+    }
+
     private fun stream(
         addonName: String,
         url: String? = null,

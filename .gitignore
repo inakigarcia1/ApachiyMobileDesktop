@@ -1,5 +1,9 @@
 *.iml
-.cursor/
+.cursor/*
+!.cursor/skills/
+!.cursor/skills/**
+!.cursor/rules/
+!.cursor/rules/**
 .kotlin
 .gradle
 **/build/
@@ -37,3 +41,8 @@ PERFORMANCE_FINDINGS.md
 
 # Local MPVKit iOS build environment (sparse APFS image, see MPVKit docs)
 .mpvkit-build.sparseimage
+
+# Agent QA loop (local secrets + run artifacts)
+qa/runs/
+qa/apachiy-subsync-loop/secrets.local.json
+

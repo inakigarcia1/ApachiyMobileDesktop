@@ -197,7 +197,7 @@ actual suspend fun httpGetBytesWithHeaders(
     url: String,
     headers: Map<String, String>,
     maxBytes: Int,
-): ByteArray? =
+): HttpRangeBytes? =
     runCatching {
         val response = addonHttpClient.get(url) {
             headers.forEach { (key, value) ->
@@ -207,8 +207,9 @@ actual suspend fun httpGetBytesWithHeaders(
         if (!response.status.isSuccess() && response.status.value != 206) {
             return@runCatching null
         }
-        val bytes = response.readRawBytes()
-        if (bytes.size <= maxBytes) bytes else bytes.copyOf(maxBytes)
+        val raw = response.readRawBytes()
+        val bytes = if (raw.size <= maxBytes) raw else raw.copyOf(maxBytes)
+        HttpRangeBytes(bytes, response.call.request.url.toString())
     }.getOrNull()
 
 actual suspend fun readLocalFilePrefix(path: String, maxBytes: Int): ByteArray? = null

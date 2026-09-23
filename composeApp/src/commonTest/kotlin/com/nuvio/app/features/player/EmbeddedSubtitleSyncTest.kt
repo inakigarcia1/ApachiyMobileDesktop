@@ -3,7 +3,6 @@ package com.nuvio.app.features.player
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
 import com.nuvio.app.features.player.embedded.EmbeddedSubtitleCue
-import com.nuvio.app.features.player.embedded.EmbeddedSubtitleReference
 import com.nuvio.app.features.player.embedded.EmbeddedTextCodec
 import com.nuvio.app.features.player.embedded.EmbeddedTextTrack
 import com.nuvio.app.features.player.embedded.isApachiySubtitleAddon
@@ -120,6 +119,13 @@ class EmbeddedSubtitleSyncTest {
     }
 
     @Test
+    fun cuesElementTotalBytesReadsEbmlSize() {
+        val header = byteArrayOf(0x1C, 0x53, 0xBB.toByte(), 0x6B, 0xE4.toByte())
+        assertEquals(105, MkvTextSubtitleParser.cuesElementTotalBytes(header))
+        assertNull(MkvTextSubtitleParser.cuesElementTotalBytes(byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte())))
+    }
+
+    @Test
     fun pickEvenIndicesSpreadsAcrossRange() {
         assertEquals(listOf(0, 1, 2), pickEvenIndices(3, 16))
         assertEquals(listOf(0, 5, 10, 15), pickEvenIndices(16, 4))
@@ -147,32 +153,10 @@ class EmbeddedSubtitleSyncTest {
     }
 
     @Test
-    fun postsOnlyToApachiyAddon() {
+    fun communityRequestStaysOnTheApachiyAddon() {
         val apachiy = manifest("com.apachiy.addon", "https://api.example/apachiy/manifest.json")
         val other = manifest("org.stremio.subtitles", "https://subs.example/manifest.json")
-        val reference = EmbeddedSubtitleReference("1\n00:00:00,000 --> 00:00:01,000\nHi\n".encodeToByteArray(), "embedded.srt", "eng")
 
-        assertTrue(
-            AddonSubtitleRequest.shouldPostEmbeddedReference(
-                manifest = apachiy,
-                subtitleUrl = "https://api.example/apachiy/subtitles/movie/tt1.json",
-                reference = reference,
-            ),
-        )
-        assertFalse(
-            AddonSubtitleRequest.shouldPostEmbeddedReference(
-                manifest = other,
-                subtitleUrl = "https://subs.example/subtitles/movie/tt1.json",
-                reference = reference,
-            ),
-        )
-        assertFalse(
-            AddonSubtitleRequest.shouldPostEmbeddedReference(
-                manifest = apachiy,
-                subtitleUrl = "https://api.example/apachiy/subtitles/movie/tt1.json",
-                reference = null,
-            ),
-        )
         assertTrue(isApachiySubtitleAddon(apachiy, "https://api.example/apachiy/subtitles/movie/tt1.json"))
         assertFalse(isApachiySubtitleAddon(other, "https://subs.example/subtitles/movie/tt1.json"))
     }
@@ -187,61 +171,14 @@ class EmbeddedSubtitleSyncTest {
     }
 
     @Test
-    fun postFallsBackToGetUnless2xx() {
-        assertFalse(AddonSubtitleRequest.shouldFallbackPostToGet(200))
-        assertFalse(AddonSubtitleRequest.shouldFallbackPostToGet(204))
-        assertTrue(AddonSubtitleRequest.shouldFallbackPostToGet(404))
-        assertTrue(AddonSubtitleRequest.shouldFallbackPostToGet(405))
-        assertTrue(AddonSubtitleRequest.shouldFallbackPostToGet(415))
-        assertTrue(AddonSubtitleRequest.shouldFallbackPostToGet(500))
-        assertTrue(AddonSubtitleRequest.shouldFallbackPostToGet(503))
-        assertTrue(AddonSubtitleRequest.shouldFallbackPostToGet(400))
-        assertTrue(AddonSubtitleRequest.listingHasSubtitleUrls("""{"subtitles":[{"id":"a","url":"http://x/y"}]}"""))
-        assertFalse(AddonSubtitleRequest.listingHasSubtitleUrls("""{"subtitles":[]}"""))
-        assertFalse(AddonSubtitleRequest.listingHasSubtitleUrls("CSRF token is missing"))
-    }
-
-    @Test
-    fun multipartIncludesReferenceFileAndOptionalLang() {
-        val reference = EmbeddedSubtitleReference(
-            bytes = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi\n".encodeToByteArray(),
-            filename = "embedded.vtt",
-            language = "eng",
-        )
-        val (contentType, body) = AddonSubtitleRequest.buildMultipartBody(reference)
-        assertTrue(contentType.startsWith("multipart/form-data; boundary="))
-        assertTrue(body.contains("name=\"reference\""))
-        assertTrue(body.contains("filename=\"embedded.vtt\""))
-        assertTrue(body.contains("name=\"referenceLang\""))
-        assertTrue(body.contains("eng"))
-        assertTrue(body.contains("WEBVTT"))
-    }
-
-    @Test
-    fun overlayStaysUntilPipelineAndPlayerAreReady() {
-        assertFalse(
-            AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = false, waitExpired = false),
-        )
-        assertTrue(
-            AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = true, waitExpired = false),
-        )
-        assertTrue(
-            AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = false, waitExpired = true),
-        )
+    fun overlayWaitsForTheSubtitleAttempt() {
+        assertFalse(AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = false))
+        assertTrue(AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = true))
         assertFalse(
             AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
                 playerIsLoading = false,
                 pipelineDone = false,
                 playerBound = false,
-                waitExpired = false,
-            ),
-        )
-        assertFalse(
-            AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
-                playerIsLoading = false,
-                pipelineDone = true,
-                playerBound = false,
-                waitExpired = false,
             ),
         )
         assertFalse(
@@ -249,7 +186,13 @@ class EmbeddedSubtitleSyncTest {
                 playerIsLoading = true,
                 pipelineDone = true,
                 playerBound = true,
-                waitExpired = false,
+            ),
+        )
+        assertFalse(
+            AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
+                playerIsLoading = false,
+                pipelineDone = true,
+                playerBound = false,
             ),
         )
         assertTrue(
@@ -257,15 +200,6 @@ class EmbeddedSubtitleSyncTest {
                 playerIsLoading = false,
                 pipelineDone = true,
                 playerBound = true,
-                waitExpired = false,
-            ),
-        )
-        assertTrue(
-            AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
-                playerIsLoading = false,
-                pipelineDone = false,
-                playerBound = true,
-                waitExpired = true,
             ),
         )
     }

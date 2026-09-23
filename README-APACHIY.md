@@ -48,6 +48,22 @@ Equivalente manual:
 
 `local.properties` sigue apuntando a producción (`supabase.apachiy.org`, `api.apachiy.org`). Solo con el flag `nuvio.useLocalDev` (o `APACHIY_USE_LOCAL_DEV=1`) se aplican los overrides de `local.dev.properties`.
 
+### Mobile contra backend local
+
+En `local.dev.properties` dejá **localhost** (igual que desktop). Al compilar/instalar para el emulador, Gradle reescribe a **10.0.2.2** automáticamente.
+
+```powershell
+.\scripts\run-android-local.ps1
+```
+
+Equivalente manual (PowerShell: comillas en `-P…`):
+
+```powershell
+.\gradlew.bat ":androidApp:installFullDebug" '-Pnuvio.android.distribution=full' '-Pnuvio.useLocalDev=true'
+```
+
+Teléfono físico en la LAN: `-Pnuvio.android.localDevHost=192.168.x.x`.
+
 En macOS/Linux también: `packageReleaseDmg`, `packageReleaseDeb`, etc.
 
 ## Tests

@@ -1,6 +1,8 @@
 package com.nuvio.app.features.profiles
 
 import androidx.compose.ui.graphics.Color
+import com.nuvio.app.core.network.ApachiyConfig
+import com.nuvio.app.core.network.ServerConfigurationRepository
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -113,7 +115,10 @@ fun avatarStorageUrl(storagePath: String): String =
     if (storagePath.startsWith("https://") || storagePath.startsWith("http://")) {
         storagePath
     } else {
-        "${com.nuvio.app.core.network.ServerConfigurationRepository.active.value.backendUrl}/storage/v1/object/public/avatars/$storagePath"
+        val configuredBase = ApachiyConfig.AVATAR_PUBLIC_BASE_URL.trim().trimEnd('/')
+        val base = configuredBase.takeIf { it.isNotBlank() }
+            ?: "${ServerConfigurationRepository.active.value.backendUrl.trimEnd('/')}/storage/v1/object/public/avatars"
+        "$base/$storagePath"
     }
 
 fun avatarImageUrl(avatar: AvatarCatalogItem): String? =

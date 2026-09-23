@@ -65,6 +65,9 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.CaptionStyleCompat
 import com.nuvio.app.R
+import com.nuvio.app.features.autosync.AutoSyncCandidateScope
+import com.nuvio.app.features.autosync.AutoSyncExtractorsFactory
+import com.nuvio.app.features.autosync.AutoSyncPlayerCoordinator
 import com.nuvio.app.features.streams.normalizeStreamType
 import `is`.xyz.mpv.BaseMPVView
 import `is`.xyz.mpv.MPV
@@ -304,10 +307,13 @@ private fun ExoPlayerSurface(
     var resolvedMediaItem by remember(playerSourceKey) { mutableStateOf(initialMediaItem) }
     var probeAttempted by remember(playerSourceKey) { mutableStateOf(false) }
 
-    val extractorsFactory = remember {
-        DefaultExtractorsFactory()
-            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
-            .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE)
+    val extractorsFactory = remember(sourceUrl) {
+        AutoSyncExtractorsFactory(
+            delegate = DefaultExtractorsFactory()
+                .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
+                .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE),
+            sourceKey = sourceUrl,
+        )
     }
     val dataSourceFactory = remember(
         context,
@@ -497,6 +503,7 @@ private fun ExoPlayerSurface(
 
     val pendingSubtitleTrackIndex = remember { mutableListOf<Int>() }
     val pendingAudioTrackSelection = remember { mutableListOf<TrackSelectionSnapshot>() }
+    var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
     var subtitleSelectionJob by remember { mutableStateOf<Job?>(null) }
     val isInPip = rememberIsInPictureInPicture()
     val pipSubtitleScale by rememberUpdatedState(if (isInPip) 0.4f else 1.0f)
@@ -506,6 +513,23 @@ private fun ExoPlayerSurface(
             scope = coroutineScope,
             getPlayer = { exoPlayer },
             getSubtitleDelayMs = { latestSubtitleDelayMs.value },
+        )
+    }
+    val autoSyncCoordinator = remember(exoPlayer, sidecarController, sourceUrl) {
+        AutoSyncPlayerCoordinator(
+            context = context,
+            scope = coroutineScope,
+            player = exoPlayer,
+            sidecar = sidecarController,
+            sourceUrl = sourceUrl,
+            sourceHeaders = sanitizedSourceHeaders,
+            getSubtitleHeaders = { sanitizedSourceHeaders },
+            getUseLibass = { useLibass },
+            getPreferredLanguage = {
+                PlayerSettingsRepository.uiState.value.preferredSubtitleLanguage
+            },
+            onMimeTypeSelected = { mime -> selectedExternalSubtitleMimeType = mime },
+            onSubtitleDelayChanged = { delay -> subtitleDelayMs = delay },
         )
     }
 
@@ -634,6 +658,12 @@ private fun ExoPlayerSurface(
                 if (playbackState == Player.STATE_READY) {
                     fallbackStartPositionMs = null
                     latestOnError.value(null)
+                    pendingSeekPositionMs?.let { target ->
+                        pendingSeekPositionMs = null
+                        if (kotlin.math.abs(exoPlayer.currentPosition - target) > 500L) {
+                            exoPlayer.seekTo(target)
+                        }
+                    }
                     exoPlayer.logCurrentTracks("STATE_READY")
                 }
                 syncPlayerViewKeepScreenOn()
@@ -726,6 +756,7 @@ private fun ExoPlayerSurface(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            autoSyncCoordinator.cancel()
             lifecycleOwner.lifecycle.removeObserver(observer)
             playerViewRef?.releaseLibassOverlay()
             exoPlayer.release()
@@ -751,7 +782,12 @@ private fun ExoPlayerSurface(
                 }
 
                 override fun seekTo(positionMs: Long) {
-                    exoPlayer.seekTo(positionMs.coerceAtLeast(0L))
+                    val target = positionMs.coerceAtLeast(0L)
+                    if (exoPlayer.playbackState == Player.STATE_IDLE) {
+                        pendingSeekPositionMs = target
+                        return
+                    }
+                    exoPlayer.seekTo(target)
                 }
 
                 override fun seekBy(offsetMs: Long) {
@@ -941,6 +977,34 @@ private fun ExoPlayerSurface(
 
                 override fun setSubtitleDelayMs(delayMs: Int) {
                     subtitleDelayMs = delayMs.coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS)
+                }
+
+                override fun runSelectedAutoSync(
+                    sourceUrl: String,
+                    sourceHeaders: Map<String, String>,
+                    subtitleUrl: String,
+                    subtitleHeaders: Map<String, String>,
+                ): Boolean {
+                    autoSyncCoordinator.start(
+                        url = subtitleUrl,
+                        candidateScope = AutoSyncCandidateScope.SELECTED_ONLY,
+                        fallbackAttach = { fallbackUrl -> setSubtitleUri(fallbackUrl) },
+                    )
+                    return true
+                }
+
+                override fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean {
+                    val current = sidecarController.activeSidecarSubtitleKey ?: return false
+                    val parsed = parseSidecarTimedCuesRobust(body, sourceUrl)
+                    if (parsed.cues.isEmpty()) return false
+                    val committed = sidecarController.commitPreparedSidecarSubtitle(
+                        expectedCurrentUrl = current,
+                        newUrl = current,
+                        cues = parsed.cues,
+                        expectedGeneration = sidecarController.currentGenerationFor(current),
+                    )
+                    if (committed) subtitleDelayMs = 0
+                    return committed
                 }
             }
         )
@@ -1625,6 +1689,16 @@ private class NuvioLibmpvView(
                         delayMs.coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS) / 1000.0,
                     )
                 }
+            }
+
+            override fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean {
+                val file = java.io.File(context.cacheDir, "autosync-${sourceUrl.hashCode()}.srt")
+                file.writeText(body)
+                executeMpv {
+                    mpv.command("sub-add", file.absolutePath, "select")
+                    mpv.setPropertyDouble("sub-delay", 0.0)
+                }
+                return true
             }
         }
 

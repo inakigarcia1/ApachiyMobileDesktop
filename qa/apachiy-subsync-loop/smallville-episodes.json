@@ -1,0 +1,24 @@
+{
+  "series": "Smallville",
+  "searchQuery": "Smallville",
+  "type": "series",
+  "imdbId": "tt0279600",
+  "notes": "Prefer rips with non-Spanish embedded SRT so the client POSTs a reference and community-subs/ffsubsync can align Spanish. Episodes with embedded Spanish are SKIP. Open via play_episode (not Cua search) using type+imdbId+season+episode.",
+  "episodes": [
+    { "episodeId": "s01e01", "season": 1, "episode": 1, "title": "Pilot" },
+    { "episodeId": "s01e02", "season": 1, "episode": 2, "title": "Metamorphosis" },
+    { "episodeId": "s01e03", "season": 1, "episode": 3, "title": "Hothead" },
+    { "episodeId": "s01e04", "season": 1, "episode": 4, "title": "X-Ray" },
+    { "episodeId": "s01e05", "season": 1, "episode": 5, "title": "Cool" },
+    { "episodeId": "s01e06", "season": 1, "episode": 6, "title": "Hourglass" },
+    { "episodeId": "s01e07", "season": 1, "episode": 7, "title": "Craving" },
+    { "episodeId": "s01e08", "season": 1, "episode": 8, "title": "Jitters" },
+    { "episodeId": "s01e09", "season": 1, "episode": 9, "title": "Rogue" },
+    { "episodeId": "s01e10", "season": 1, "episode": 10, "title": "Shimmer" },
+    { "episodeId": "s01e11", "season": 1, "episode": 11, "title": "Hug" },
+    { "episodeId": "s01e12", "season": 1, "episode": 12, "title": "Leech" },
+    { "episodeId": "s02e01", "season": 2, "episode": 1, "title": "Vortex" },
+    { "episodeId": "s02e02", "season": 2, "episode": 2, "title": "Heat" },
+    { "episodeId": "s02e03", "season": 2, "episode": 3, "title": "Duplicity" }
+  ]
+}

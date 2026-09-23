@@ -26,6 +26,7 @@ import com.nuvio.app.features.debrid.DirectDebridPlayableResult
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
 import com.nuvio.app.features.debrid.toastMessage
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.player.agentqa.AgentQa
 import com.nuvio.app.features.p2p.P2pConsentDialog
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.player.PlayerLaunch
@@ -248,6 +249,7 @@ internal fun StreamDestination(
         if (reuseHandled) return@LaunchedEffect
         reuseHandled = true
         if (launch.manualSelection) return@LaunchedEffect
+        if (AgentQa.enabled) return@LaunchedEffect
         if (!playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
         val cacheKey = StreamLinkCacheRepository.contentKey(
             type = launch.type,
@@ -310,6 +312,8 @@ internal fun StreamDestination(
                 videoId = effectiveVideoId,
                 parentMetaId = launch.parentMetaId ?: effectiveVideoId,
                 parentMetaType = launch.parentMetaType ?: launch.type,
+                torrentFilename = cached.filename,
+                videoSize = cached.videoSize,
                 initialPositionMs = launch.resumePositionMs ?: 0L,
                 initialProgressFraction = launch.resumeProgressFraction,
                 contentLanguage = cached.contentLanguage,
@@ -404,6 +408,12 @@ internal fun StreamDestination(
             return@LaunchedEffect
         }
         autoPlayHandled = true
+        if (AgentQa.enabled) {
+            AgentQa.event(
+                "autoplay",
+                "${stream.streamLabel} | ${stream.title ?: stream.description} | size=${stream.behaviorHints.videoSize}",
+            )
+        }
         if (playerSettings.streamReuseLastLinkEnabled) {
             val cacheKey = StreamLinkCacheRepository.contentKey(
                 type = launch.type,
@@ -451,6 +461,9 @@ internal fun StreamDestination(
             videoId = effectiveVideoId,
             parentMetaId = launch.parentMetaId ?: effectiveVideoId,
             parentMetaType = launch.parentMetaType ?: launch.type,
+            torrentFilename = stream.behaviorHints.filename,
+            videoHash = stream.behaviorHints.videoHash,
+            videoSize = stream.behaviorHints.videoSize,
             initialPositionMs = launch.resumePositionMs ?: 0L,
             initialProgressFraction = launch.resumeProgressFraction,
         )

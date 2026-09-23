@@ -11,6 +11,7 @@ import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
+import com.nuvio.app.isDesktop
 import kotlin.time.TimeSource
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -78,25 +79,39 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
     }
 }
 
+internal fun PlayerScreenRuntime.finishUserTimelineSeek(positionMs: Long) {
+    val targetMs = positionMs.coerceAtLeast(0L)
+    isScrubbingTimeline = false
+    scrubbingPositionMs = null
+    if (!isDesktop) {
+        timelineHoldPositionMs = targetMs
+        initialSeekApplied = true
+    }
+    playerController?.seekTo(targetMs)
+    scheduleProgressSyncAfterSeek(if (!isDesktop) targetMs else null)
+}
+
 internal fun PlayerScreenRuntime.resetOpeningOverlayForNewSource() {
     subtitlePipelineJob?.cancel()
     subtitlePipelineJob = null
+    cancelCommunityAutoSync()
     initialLoadCompleted = false
     subtitlePipelineDone = false
-    subtitlePipelineWaitExpired = false
     openingOverlayStartMark = TimeSource.Monotonic.markNow()
+    appliedAddonSubtitleUrl = null
+    addonSubtitleApplyInFlightUrl = null
+    preparedAddonSubtitlePlaybackUri = null
+    resetAgentQaPipeline()
 }
 
 internal fun PlayerScreenRuntime.tryCompleteOpeningOverlay() {
     if (initialLoadCompleted) return
-    if (
-        AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
-            playerIsLoading = playbackSnapshot.isLoading,
-            pipelineDone = subtitlePipelineDone,
-            playerBound = playerController != null,
-            waitExpired = subtitlePipelineWaitExpired,
-        )
-    ) {
+    val dismiss = AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
+        playerIsLoading = playbackSnapshot.isLoading,
+        pipelineDone = subtitlePipelineDone,
+        playerBound = playerController != null,
+    )
+    if (dismiss) {
         initialLoadCompleted = true
     }
 }
@@ -297,17 +312,20 @@ internal fun PlayerScreenRuntime.flushWatchProgress(
     )
 }
 
-internal fun PlayerScreenRuntime.scheduleProgressSyncAfterSeek() {
+internal fun PlayerScreenRuntime.scheduleProgressSyncAfterSeek(positionOverrideMs: Long? = null) {
     val shouldRestartScrobbleAfterSeek = shouldPlay || playbackSnapshot.isPlaying
+    val snapshotForProgress = positionOverrideMs?.let { ms ->
+        playbackSnapshot.copy(positionMs = ms.coerceAtLeast(0L))
+    } ?: playbackSnapshot
     seekProgressSyncJob?.cancel()
     seekProgressSyncJob = scope.launch {
         delay(PlayerSeekProgressSyncDebounceMs)
         WatchProgressRepository.upsertPlaybackProgress(
             session = playbackSession,
-            snapshot = playbackSnapshot,
+            snapshot = snapshotForProgress,
         )
 
-        val progressPercent = currentPlaybackProgressPercent()
+        val progressPercent = currentPlaybackProgressPercent(snapshotForProgress)
         if (
             !shouldUpdateTrackingScrobbleAfterSeek(
                 hasActiveScrobble = hasRequestedScrobbleStartForCurrentItem,

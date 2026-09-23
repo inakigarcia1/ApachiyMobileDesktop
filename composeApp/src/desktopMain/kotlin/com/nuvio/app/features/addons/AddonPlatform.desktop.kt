@@ -13,9 +13,11 @@ import kotlinx.serialization.json.Json
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.network_empty_response_body
 import nuvio.composeapp.generated.resources.network_request_failed_http
+import okhttp3.ConnectionPool
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
@@ -92,6 +94,17 @@ internal object DesktopAddonHttpClientProvider {
 }
 
 private val desktopHttpClient = DesktopAddonHttpClientProvider.get()
+
+// Range reads run alongside playback, so OkHttp must abort them itself: a coroutine
+// timeout cannot interrupt the blocking socket read inside execute().
+private val desktopMediaRangeClient = desktopHttpClient.newBuilder()
+    .protocols(listOf(Protocol.HTTP_1_1))
+    .connectionPool(ConnectionPool(0, 1, TimeUnit.NANOSECONDS))
+    .callTimeout(15, TimeUnit.SECONDS)
+    .connectTimeout(8, TimeUnit.SECONDS)
+    .readTimeout(8, TimeUnit.SECONDS)
+    .retryOnConnectionFailure(true)
+    .build()
 
 private const val truncationSuffix = "\n...[truncated]"
 
@@ -285,12 +298,13 @@ actual suspend fun httpGetBytesWithHeaders(
     url: String,
     headers: Map<String, String>,
     maxBytes: Int,
-): ByteArray? = withContext(Dispatchers.IO) {
+): HttpRangeBytes? = withContext(Dispatchers.IO) {
     runCatching {
         val request = buildDesktopRequest("GET", url, headers, "")
-        desktopHttpClient.newCall(request).execute().use { response ->
+        desktopMediaRangeClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful && response.code != 206) return@use null
-            readAtMostBytes(response.body?.byteStream() ?: return@use null, maxBytes).bytes
+            val bytes = readAtMostBytes(response.body?.byteStream() ?: return@use null, maxBytes).bytes
+            HttpRangeBytes(bytes, response.request.url.toString())
         }
     }.getOrNull()
 }

@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -52,6 +53,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
+import com.nuvio.app.features.autosync.isChosenSubtitleLanguage
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.player.AndroidLibmpvVideoOutput
@@ -297,6 +300,7 @@ private fun PlaybackSettingsSection(
     var showPreferredAudioDialog by remember { mutableStateOf(false) }
     var showSecondaryAudioDialog by remember { mutableStateOf(false) }
     var showPreferredSubtitleDialog by remember { mutableStateOf(false) }
+    var pendingAutoSyncLanguage by remember { mutableStateOf(false) }
     var showSecondarySubtitleDialog by remember { mutableStateOf(false) }
     var showSubtitleTextColorDialog by remember { mutableStateOf(false) }
     var showSubtitleBackgroundColorDialog by remember { mutableStateOf(false) }
@@ -351,6 +355,16 @@ private fun PlaybackSettingsSection(
     }
     val hapticFeedback = LocalHapticFeedback.current
     val sectionSpacing = if (isTablet) 18.dp else 12.dp
+    val operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible
+    val autoSyncOnStart by remember {
+        AutoSyncPreferencesRepository.ensureLoaded()
+        AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart
+    }.collectAsStateWithLifecycle()
+    val autoSyncAggressive by remember {
+        AutoSyncPreferencesRepository.aggressiveMode
+    }.collectAsStateWithLifecycle()
+    val subtitleLanguageChosen = isChosenSubtitleLanguage(preferredSubtitleLanguage)
+    val autoSyncShownOn = autoSyncOnStart && subtitleLanguageChosen
 
     Column(
         verticalArrangement = Arrangement.spacedBy(sectionSpacing),
@@ -503,6 +517,39 @@ private fun PlaybackSettingsSection(
                     isTablet = isTablet,
                     onClick = { showPreferredSubtitleDialog = true },
                 )
+                if (operatorSettingsVisible) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_playback_subtitle_autosync),
+                        description = if (subtitleLanguageChosen) {
+                            stringResource(Res.string.settings_playback_subtitle_autosync_description)
+                        } else {
+                            stringResource(Res.string.settings_playback_subtitle_autosync_needs_language)
+                        },
+                        checked = autoSyncShownOn,
+                        enabled = subtitleLanguageEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = { enabled ->
+                            if (!enabled) {
+                                AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(false)
+                            } else if (subtitleLanguageChosen) {
+                                AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
+                            } else {
+                                pendingAutoSyncLanguage = true
+                                showPreferredSubtitleDialog = true
+                            }
+                        },
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_playback_subtitle_autosync_aggressive),
+                        description = stringResource(Res.string.settings_playback_subtitle_autosync_aggressive_description),
+                        checked = autoSyncAggressive,
+                        enabled = subtitleLanguageEnabled && autoSyncShownOn,
+                        isTablet = isTablet,
+                        onCheckedChange = AutoSyncPreferencesRepository::setAggressiveMode,
+                    )
+                }
                 SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_playback_secondary_subtitle_language),
@@ -1384,10 +1431,18 @@ private fun PlaybackSettingsSection(
             },
             selectedValue = preferredSubtitleLanguage,
             onSelect = { value ->
-                PlayerSettingsRepository.setPreferredSubtitleLanguage(value ?: SubtitleLanguageOption.NONE)
+                val chosen = value ?: SubtitleLanguageOption.NONE
+                PlayerSettingsRepository.setPreferredSubtitleLanguage(chosen)
+                if (pendingAutoSyncLanguage && isChosenSubtitleLanguage(chosen)) {
+                    AutoSyncPreferencesRepository.setPreferredSubtitleAutoSyncOnStart(true)
+                }
+                pendingAutoSyncLanguage = false
                 showPreferredSubtitleDialog = false
             },
-            onDismiss = { showPreferredSubtitleDialog = false },
+            onDismiss = {
+                pendingAutoSyncLanguage = false
+                showPreferredSubtitleDialog = false
+            },
         )
     }
 

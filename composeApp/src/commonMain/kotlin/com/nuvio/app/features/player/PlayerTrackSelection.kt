@@ -75,6 +75,49 @@ internal data class SubtitleAutoSelectionPlan(
     val mode: SubtitleAutoSelectionMode,
 )
 
+internal fun isUndesirableAudioTrack(track: AudioTrack): Boolean {
+    val text = listOfNotNull(track.label, track.language, track.id)
+        .joinToString(" ")
+        .lowercase()
+    if (text.isBlank()) return false
+    return listOf(
+        "commentary",
+        "commentaries",
+        "director's",
+        "director ",
+        "descriptive",
+        "audio description",
+        "narrator",
+    ).any { marker -> text.contains(marker) }
+}
+
+internal fun findPreferredOriginalAudioTrackIndex(
+    tracks: List<AudioTrack>,
+    contentOriginalLanguage: String?,
+): Int {
+    val eligible = tracks.filter { !isUndesirableAudioTrack(it) }
+    if (eligible.isEmpty()) return -1
+
+    val originalTargets = resolvePreferredAudioLanguageTargets(
+        preferredAudioLanguage = AudioLanguageOption.ORIGINAL,
+        secondaryPreferredAudioLanguage = null,
+        deviceLanguages = emptyList(),
+        contentOriginalLanguage = contentOriginalLanguage,
+    )
+    if (originalTargets.isNotEmpty()) {
+        val matched = findPreferredTrackIndex(
+            tracks = eligible,
+            targets = originalTargets,
+            language = ::resolveAudioTrackLanguageTarget,
+        )
+        if (matched >= 0) {
+            val track = eligible[matched]
+            return tracks.indexOfFirst { it.index == track.index }
+        }
+    }
+    return -1
+}
+
 internal fun resolveAudioTrackLanguageTarget(track: AudioTrack?): String? {
     if (track == null) return null
 

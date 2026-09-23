@@ -29,6 +29,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import java.awt.event.WindowAdapter
+import java.io.File
 import java.awt.event.WindowEvent
 import java.util.concurrent.CountDownLatch
 import javax.swing.SwingUtilities
@@ -102,6 +103,7 @@ internal class NativePlayerController(
     private var pendingSubtitleStyle: SubtitleStyleState? = null
     private var pendingUseLibass: Boolean = false
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
+    private var lastSentControlsPresentationKey: NativeControlsPresentationKey? = null
     private var onAction: (PlayerControlsAction) -> Boolean = { false }
     private var onEvent: (String, Double) -> Boolean = { _, _ -> false }
     private var onScrubChange: (Long) -> Boolean = { false }
@@ -431,8 +433,17 @@ internal class NativePlayerController(
             state = stateWithVolume.nativeControlsStructureKey(),
             isFullscreen = isFullscreen,
         )
-        if (structureKey == lastSentControlsStructureKey) return
+        val presentationKey = NativeControlsPresentationKey(
+            showOpeningOverlay = stateWithVolume.showOpeningOverlay,
+            controlsVisible = stateWithVolume.controlsVisible,
+        )
+        if (structureKey == lastSentControlsStructureKey &&
+            presentationKey == lastSentControlsPresentationKey
+        ) {
+            return
+        }
         lastSentControlsStructureKey = structureKey
+        lastSentControlsPresentationKey = presentationKey
         log.d {
             "updateControls handle=$current title=${stateWithVolume.title.take(40)} " +
                 "pos=${stateWithVolume.positionMs} duration=${stateWithVolume.durationMs} " +
@@ -444,6 +455,7 @@ internal class NativePlayerController(
 
     fun onDesktopFullscreenChanged() {
         lastSentControlsStructureKey = null
+        lastSentControlsPresentationKey = null
         updateControls(controlsState)
         requestKeyboardFocus()
     }
@@ -1004,6 +1016,18 @@ internal class NativePlayerController(
         applyPendingSubtitleSettings()
     }
 
+    override fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean {
+        val current = handle.takeIf { it != 0L } ?: return false
+        val file = File(System.getProperty("java.io.tmpdir"), "apachiy-autosync-${sourceUrl.hashCode()}.srt")
+        file.writeText(body)
+        NativePlayerBridge.clearExternalSubtitles(current)
+        NativePlayerBridge.addSubtitleUrl(current, file.absolutePath)
+        NativePlayerBridge.setSubtitleDelayMs(current, 0)
+        pendingSubtitleDelayMs = 0
+        applyPendingSubtitleSettings()
+        return true
+    }
+
     override fun setSubtitleDelayMs(delayMs: Int) {
         val clamped = delayMs.coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS)
         pendingSubtitleDelayMs = clamped
@@ -1175,6 +1199,11 @@ private fun String.toPlayerControlsAction(): PlayerControlsAction? =
 private data class NativeControlsStructureKey(
     val state: PlayerControlsState,
     val isFullscreen: Boolean,
+)
+
+private data class NativeControlsPresentationKey(
+    val showOpeningOverlay: Boolean,
+    val controlsVisible: Boolean,
 )
 
 private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =

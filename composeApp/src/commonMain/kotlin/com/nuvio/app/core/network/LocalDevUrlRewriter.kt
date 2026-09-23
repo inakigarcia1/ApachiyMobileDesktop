@@ -1,6 +1,7 @@
 package com.nuvio.app.core.network
 
 import com.nuvio.app.isDesktop
+import com.nuvio.app.isIos
 
 /**
  * Desktop local-dev builds talk to the same docker stack as the Android emulator,
@@ -9,6 +10,39 @@ import com.nuvio.app.isDesktop
  * the desktop build already talks to, which avoids needing the ASP.NET dev cert.
  */
 private val API_TLS_PORTS = setOf(8081, 10051)
+
+private const val EMULATOR_HOST = "10.0.2.2"
+
+internal fun downgradeEmulatorPlaintextScheme(url: String): String {
+    if (!url.startsWith("https://", ignoreCase = true)) return url
+    val afterScheme = url.substring("https://".length)
+    if (!afterScheme.startsWith(EMULATOR_HOST)) return url
+    val afterHost = afterScheme.substring(EMULATOR_HOST.length)
+    if (afterHost.isNotEmpty() && afterHost[0] !in charArrayOf(':', '/', '?', '#')) return url
+    val portDigits = if (afterHost.startsWith(":")) afterHost.drop(1).takeWhile { it.isDigit() } else ""
+    val port = when {
+        portDigits.isNotEmpty() -> portDigits.toIntOrNull() ?: return url
+        else -> 443
+    }
+    if (port == 443 || port in API_TLS_PORTS) return url
+    return "http://$afterScheme"
+}
+
+internal fun rewriteHostLoopbackToEmulator(
+    url: String,
+    emulatorHost: String = EMULATOR_HOST,
+): String {
+    if (parseLoopbackUrl(url) == null) return url
+    val schemeEnd = url.indexOf("://").takeIf { it > 0 } ?: return url
+    val hostStart = schemeEnd + 3
+    val afterScheme = url.substring(hostStart)
+    val hostLength = when {
+        afterScheme.startsWith("localhost", ignoreCase = true) -> "localhost".length
+        afterScheme.startsWith("127.0.0.1") -> "127.0.0.1".length
+        else -> return url
+    }
+    return url.substring(0, hostStart) + emulatorHost + url.substring(hostStart + hostLength)
+}
 
 internal fun rewriteEmulatorLoopbackUrl(
     url: String,
@@ -75,6 +109,8 @@ private fun localDevApiOrigin(): String? {
 
 internal fun rewriteLocalDevUrl(raw: String?): String? {
     val url = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    if (!LocalDevConfig.ENABLED || !isDesktop) return url
-    return rewriteEmulatorLoopbackUrl(url)
+    if (!LocalDevConfig.ENABLED) return url
+    if (isDesktop) return rewriteEmulatorLoopbackUrl(url)
+    if (!isIos) return downgradeEmulatorPlaintextScheme(rewriteHostLoopbackToEmulator(url))
+    return url
 }

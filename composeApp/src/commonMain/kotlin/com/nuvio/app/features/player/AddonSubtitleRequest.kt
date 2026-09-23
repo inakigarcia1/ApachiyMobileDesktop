@@ -1,50 +1,20 @@
 package com.nuvio.app.features.player
 
-import com.nuvio.app.features.addons.AddonManifest
-import com.nuvio.app.features.player.embedded.EmbeddedSubtitleReference
-import com.nuvio.app.features.player.embedded.isApachiySubtitleAddon
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 internal object AddonSubtitleRequest {
-    fun shouldPostEmbeddedReference(
-        manifest: AddonManifest,
-        subtitleUrl: String,
-        reference: EmbeddedSubtitleReference?,
-    ): Boolean = reference != null && isApachiySubtitleAddon(manifest, subtitleUrl)
-
-    fun shouldFallbackPostToGet(status: Int): Boolean = status !in 200..299
-
-    fun listingHasSubtitleUrls(body: String): Boolean {
-        val trimmed = body.trimStart()
+    fun isAttachSuccess(status: Int, body: String): Boolean {
+        if (status !in 200..299) return false
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) return true
         if (!trimmed.startsWith("{")) return false
-        return trimmed.contains("\"url\"", ignoreCase = true)
-    }
-
-    fun buildMultipartBody(reference: EmbeddedSubtitleReference): Pair<String, String> {
-        val boundary = "----NuvioEmbedded${reference.bytes.size}${reference.filename.hashCode().toUInt()}"
-        val safeName = reference.filename.substringAfterLast('/').ifBlank { "embedded.srt" }
-        val body = buildString {
-            append("--")
-            append(boundary)
-            append("\r\n")
-            append("Content-Disposition: form-data; name=\"reference\"; filename=\"")
-            append(safeName)
-            append("\"\r\n")
-            append("Content-Type: application/octet-stream\r\n\r\n")
-            append(reference.bytes.decodeToString())
-            append("\r\n")
-            val lang = reference.language?.trim().orEmpty()
-            if (lang.isNotEmpty()) {
-                append("--")
-                append(boundary)
-                append("\r\n")
-                append("Content-Disposition: form-data; name=\"referenceLang\"\r\n\r\n")
-                append(lang)
-                append("\r\n")
-            }
-            append("--")
-            append(boundary)
-            append("--\r\n")
-        }
-        return "multipart/form-data; boundary=$boundary" to body
+        return runCatching {
+            val element = Json.parseToJsonElement(trimmed)
+            val ok = element.jsonObject["ok"]?.jsonPrimitive?.contentOrNull
+            ok.equals("true", ignoreCase = true)
+        }.getOrDefault(false)
     }
 }

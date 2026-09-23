@@ -18,7 +18,10 @@ import nuvio.composeapp.generated.resources.account_error_signup_disabled
 import nuvio.composeapp.generated.resources.account_error_unexpected
 import org.jetbrains.compose.resources.StringResource
 
-fun authErrorStringResource(error: Throwable): StringResource {
+fun authErrorStringResource(
+    error: Throwable,
+    deviceOfflineLike: Boolean = false,
+): StringResource {
     val message = buildString {
         append(error.message.orEmpty())
         var cause = error.cause
@@ -43,7 +46,11 @@ fun authErrorStringResource(error: Throwable): StringResource {
             message.contains("no address associated") ||
             message.contains("unknownhost") ||
             message.contains("failed to lookup") ->
-            Res.string.account_error_no_internet
+            if (deviceOfflineLike) {
+                Res.string.account_error_no_internet
+            } else {
+                Res.string.account_error_connection_refused
+            }
         message.contains("timeout") || message.contains("timed out") -> Res.string.account_error_connection_timeout
         message.contains("connection refused") ||
             message.contains("connect failed") ||

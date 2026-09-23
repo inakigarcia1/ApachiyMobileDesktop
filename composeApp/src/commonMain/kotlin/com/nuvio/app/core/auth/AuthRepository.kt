@@ -3,8 +3,10 @@ package com.nuvio.app.core.auth
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.device.ApachiyDeviceApi
 import com.nuvio.app.core.network.ApachiyConfig
+import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.storage.LocalAccountDataCleaner
+import com.nuvio.app.core.sync.SyncClientIdentity
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.exception.AuthRestException
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -18,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
@@ -57,17 +60,24 @@ object AuthRepository {
                         )
                     }
                     is SessionStatus.NotAuthenticated -> {
-                        _state.value = AuthState.Unauthenticated
+                        // Supabase emits this during refresh gaps; keep persisted refresh tokens
+                        // until explicit sign-out or a definitive invalid_grant from the server.
+                        applyCachedSessionOrUnauthenticated()
+                        if (hasPersistedSession()) {
+                            scope.launch { refreshCurrentSession() }
+                        }
                     }
                     is SessionStatus.Initializing -> {
                         _state.value = AuthState.Loading
                     }
                     is SessionStatus.RefreshFailure -> {
+                        // Keep the cached session usable while Supabase retries.
+                        // Forcing Unauthenticated here caused spurious login screens
+                        // after overnight/token refresh blips even though refresh_token
+                        // was still valid on disk.
+                        applyCachedSessionOrUnauthenticated()
                         scope.launch {
-                            val recovered = refreshCurrentSession()
-                            if (!recovered) {
-                                _state.value = AuthState.Unauthenticated
-                            }
+                            refreshCurrentSession()
                         }
                     }
                 }
@@ -83,7 +93,37 @@ object AuthRepository {
             validatedRemoteUserId = userId
             true
         }.getOrElse { e ->
-            if (isInvalidRemoteSessionError(e)) {
+            if (isLikelyExpiredAccessTokenError(e)) {
+                val recovered = refreshCurrentSession()
+                if (recovered) {
+                    return runCatching {
+                        SupabaseProvider.client.auth.retrieveUserForCurrentSession(false)
+                        validatedRemoteUserId = userId
+                        true
+                    }.getOrElse { refreshError ->
+                        if (isDefinitiveInvalidAccountError(refreshError)) {
+                            log.w(refreshError) {
+                                "Stored Supabase session no longer belongs to an active account; clearing local auth"
+                            }
+                            clearLocalSessionAfterRemoteInvalidation()
+                            false
+                        } else {
+                            log.w(refreshError) {
+                                "Unable to re-validate session after refresh; keeping cached auth state"
+                            }
+                            true
+                        }
+                    }
+                }
+                if (isDefinitiveInvalidAccountError(e)) {
+                    log.w(e) { "Stored Supabase session no longer belongs to an active account; clearing local auth" }
+                    clearLocalSessionAfterRemoteInvalidation()
+                    false
+                } else {
+                    log.w(e) { "Access token expired and refresh failed transiently; keeping cached auth state" }
+                    true
+                }
+            } else if (isDefinitiveInvalidAccountError(e)) {
                 log.w(e) { "Stored Supabase session no longer belongs to an active account; clearing local auth" }
                 clearLocalSessionAfterRemoteInvalidation()
                 false
@@ -94,16 +134,38 @@ object AuthRepository {
         }
     }
 
+    private fun applyCachedSessionOrUnauthenticated() {
+        val session = SupabaseProvider.client.auth.currentSessionOrNull()
+        val user = session?.user
+        val userId = user?.id.orEmpty()
+        if (user != null && userId.isNotBlank()) {
+            _state.value = AuthState.Authenticated(
+                userId = userId,
+                email = user.email,
+                isAnonymous = false,
+            )
+        } else if (_state.value !is AuthState.Authenticated) {
+            _state.value = AuthState.Unauthenticated
+        }
+    }
+
     fun signInAnonymously() {
         _error.value = null
     }
 
     suspend fun refreshCurrentSession(): Boolean =
-        runCatching {
+        try {
             SupabaseProvider.client.auth.refreshCurrentSession()
+            applyCurrentSessionToState()
             true
-        }.getOrElse { error ->
-            log.w(error) { "Failed to refresh current session" }
+        } catch (error: Throwable) {
+            if (isDefinitiveInvalidAccountError(error)) {
+                log.w(error) { "Refresh token rejected; clearing local auth" }
+                clearLocalSessionAfterRemoteInvalidation()
+            } else {
+                log.w(error) { "Failed to refresh current session; keeping cached session" }
+                applyCachedSessionOrUnauthenticated()
+            }
             false
         }
 
@@ -125,7 +187,23 @@ object AuthRepository {
         _error.value = userFacingAuthError(e)
     }
 
-    suspend fun signInWithEmail(email: String, password: String): Result<Unit> = runCatching {
+    suspend fun signInWithEmail(email: String, password: String): Result<Unit> {
+        val first = signInWithEmailOnce(email, password, publishError = false)
+        if (first.isSuccess) return first
+        val failure = first.exceptionOrNull()
+        if (failure == null || !isTransientHostLookupFailure(failure)) {
+            failure?.let { _error.value = userFacingAuthError(it) }
+            return first
+        }
+        delay(400)
+        return signInWithEmailOnce(email, password, publishError = true)
+    }
+
+    private suspend fun signInWithEmailOnce(
+        email: String,
+        password: String,
+        publishError: Boolean,
+    ): Result<Unit> = runCatching {
         _error.value = null
         lastAuthKind = LastAuthKind.SignIn
         val sanitizedEmail = sanitizeAuthCredential(email)
@@ -139,7 +217,9 @@ object AuthRepository {
         if (e is CancellationException) throw e
         lastAuthKind = LastAuthKind.None
         log.e(e) { "Email sign-in failed" }
-        _error.value = userFacingAuthError(e)
+        if (publishError) {
+            _error.value = userFacingAuthError(e)
+        }
     }
 
     suspend fun signOut(): Result<Unit> {
@@ -149,6 +229,7 @@ object AuthRepository {
         val wasAnonymous = anonymousRead.getOrNull() != null
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
         validatedRemoteUserId = null
+        SyncClientIdentity.clearRegisteredDeviceId()
         val remoteSignOut = if (wasAnonymous) {
             Result.success(Unit)
         } else {
@@ -187,6 +268,7 @@ object AuthRepository {
         _error.value = null
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
         validatedRemoteUserId = null
+        SyncClientIdentity.clearRegisteredDeviceId()
         val sessionClear = runCatching { SupabaseProvider.client.auth.clearSession() }
         _state.value = AuthState.Unauthenticated
         val failure = anonymousClear.exceptionOrNull() ?: sessionClear.exceptionOrNull()
@@ -205,7 +287,13 @@ object AuthRepository {
     }
 
     suspend fun signOutIfSessionInvalid(error: Throwable, source: String): Boolean {
-        if (!isInvalidRemoteSessionError(error)) return false
+        if (isLikelyExpiredAccessTokenError(error) && !isDefinitiveInvalidAccountError(error)) {
+            val recovered = refreshCurrentSession()
+            if (recovered) return false
+            // Transient refresh failure: keep the local session.
+            return false
+        }
+        if (!isDefinitiveInvalidAccountError(error)) return false
 
         log.w(error) { "$source failed because the current Supabase account/session is no longer valid; clearing local auth" }
         clearLocalSessionAfterRemoteInvalidation()
@@ -216,6 +304,7 @@ object AuthRepository {
         _error.value = null
         AuthStorage.clearAnonymousUserId()
         validatedRemoteUserId = null
+        SyncClientIdentity.clearRegisteredDeviceId()
         runCatching {
             SupabaseProvider.client.auth.clearSession()
         }.onFailure { e ->
@@ -256,7 +345,9 @@ object AuthRepository {
     }
 
     fun hasPersistedSession(): Boolean =
-        !SupabaseProvider.client.auth.currentAccessTokenOrNull().isNullOrBlank()
+        SupabaseProvider.client.auth.currentSessionOrNull()?.let { session ->
+            session.refreshToken.isNotBlank() || session.accessToken.isNotBlank()
+        } == true
 
     private fun applyCurrentSessionToState() {
         val session = SupabaseProvider.client.auth.currentSessionOrNull() ?: return
@@ -274,41 +365,6 @@ object AuthRepository {
         _error.value = message
     }
 
-    private fun isInvalidRemoteSessionError(error: Throwable): Boolean {
-        val restError = error.findCause<RestException>()
-        if (restError?.statusCode == 401 || restError?.statusCode == 403) return true
-
-        val message = buildString {
-            append(error.message.orEmpty())
-            if (restError != null) {
-                append(' ')
-                append(restError.error)
-                append(' ')
-                append(restError.description)
-            }
-        }.lowercase()
-
-        return (
-            "jwt" in message &&
-                ("invalid" in message || "expired" in message || "malformed" in message)
-            ) || (
-            "user" in message &&
-                ("does not exist" in message || "not found" in message || "deleted" in message)
-            ) || (
-            "foreign key" in message &&
-                ("auth.users" in message || "user_id" in message)
-            )
-    }
-
-    private inline fun <reified T : Throwable> Throwable.findCause(): T? {
-        var current: Throwable? = this
-        while (current != null) {
-            if (current is T) return current
-            current = current.cause
-        }
-        return null
-    }
-
     private fun Throwable.safeAuthErrorDescription(): String? =
         findCause<AuthRestException>()
             ?.errorDescription
@@ -320,7 +376,28 @@ object AuthRepository {
                 ?.takeIf { it.isNotEmpty() }
 
     private suspend fun userFacingAuthError(error: Throwable): String =
-        getString(authErrorStringResource(error))
+        getString(
+            authErrorStringResource(
+                error,
+                deviceOfflineLike = NetworkStatusRepository.uiState.value.isOfflineLike,
+            ),
+        )
+}
+
+private fun isTransientHostLookupFailure(error: Throwable): Boolean {
+    val message = buildString {
+        append(error.message.orEmpty())
+        var cause = error.cause
+        while (cause != null) {
+            append(' ')
+            append(cause.message.orEmpty())
+            cause = cause.cause
+        }
+    }.lowercase()
+    return message.contains("unable to resolve host") ||
+        message.contains("no address associated") ||
+        message.contains("unknownhost") ||
+        message.contains("failed to lookup")
 }
 
 internal fun sanitizeAuthCredential(value: String, trim: Boolean = true): String {

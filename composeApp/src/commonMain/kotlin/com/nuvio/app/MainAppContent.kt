@@ -115,6 +115,8 @@ import com.nuvio.app.features.player.ExternalPlayerIntentResult
 import com.nuvio.app.features.player.ExternalPlayerPlatform
 import com.nuvio.app.features.player.PlayerLaunch
 import com.nuvio.app.features.player.PlayerLaunchStore
+import com.nuvio.app.features.player.agentqa.AgentQa
+import com.nuvio.app.features.player.agentqa.AgentQaPlaybackRequests
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.SubtitleLanguageOption
@@ -1085,6 +1087,45 @@ internal fun MainAppContent(
                     startFromBeginning = false,
                 )
             }
+
+        if (AgentQa.enabled) {
+            LaunchedEffect(navController) {
+                AgentQaPlaybackRequests.events.collect { request ->
+                    val result = runCatching {
+                        val meta = MetaDetailsRepository.fetch(request.type, request.metaId)
+                            ?: return@runCatching "meta_not_found"
+                        val video = meta.videos.firstOrNull { candidate ->
+                            candidate.season == request.season && candidate.episode == request.episode
+                        } ?: return@runCatching "episode_not_found"
+                        launchPlaybackWithDownloadPreference(
+                            type = meta.type,
+                            videoId = video.id,
+                            parentMetaId = meta.id,
+                            parentMetaType = meta.type,
+                            title = meta.name,
+                            logo = meta.logo,
+                            poster = meta.poster,
+                            background = meta.background,
+                            seasonNumber = video.season,
+                            episodeNumber = video.episode,
+                            episodeTitle = video.title,
+                            episodeThumbnail = video.thumbnail,
+                            pauseDescription = null,
+                            resumePositionMs = 0L,
+                            resumeProgressFraction = null,
+                            manualSelection = false,
+                            startFromBeginning = true,
+                        )
+                        "ok"
+                    }.getOrElse { error -> "error:${error.message}" }
+                    AgentQa.ackCommand(request.command, result)
+                    AgentQa.event(
+                        "play_episode",
+                        "${request.metaId} S${request.season}E${request.episode}:$result",
+                    )
+                }
+            }
+        }
 
         val onCatalogClick: (HomeCatalogSection) -> Unit = { section ->
             val launchId = CatalogLaunchStore.put(

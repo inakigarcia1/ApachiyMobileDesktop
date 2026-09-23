@@ -54,7 +54,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         onDispose { systemBackRegistration(null) }
     }
     val isInPip = rememberIsInPictureInPicture()
-    val displayedPositionMs = scrubbingPositionMs ?: playbackSnapshot.positionMs
+    val displayedPositionMs = scrubbingPositionMs
+        ?: timelineHoldPositionMs
+        ?: playbackSnapshot.positionMs
     val seasonNumber = activeSeasonNumber
     val episodeNumber = activeEpisodeNumber
     val episodeTitle = activeEpisodeTitle
@@ -162,7 +164,6 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
     val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
     val bindPlaybackSurface = AddonSubtitleLoadingGate.shouldBindPlayer(
         pipelineDone = subtitlePipelineDone,
-        waitExpired = subtitlePipelineWaitExpired,
     )
     val initialPositionRequestKey = currentInitialPositionRequestKey()
     val currentPlayerSurfaceSource = playerSurfaceSourceUrl
@@ -680,10 +681,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
                 scrubbingPositionMs = positionMs
             },
             onScrubFinished = { positionMs ->
-                isScrubbingTimeline = false
-                scrubbingPositionMs = null
-                playerController?.seekTo(positionMs)
-                scheduleProgressSyncAfterSeek()
+                finishUserTimelineSeek(positionMs)
             },
             horizontalSafePadding = horizontalSafePadding,
             modifier = Modifier.fillMaxSize(),
@@ -1200,10 +1198,7 @@ private fun PlayerScreenRuntime.handlePlayerControlsScrubChange(positionMs: Long
 
 private fun PlayerScreenRuntime.handlePlayerControlsScrubFinished(positionMs: Long) {
     playerControlsLog.d { "scrubFinished positionMs=$positionMs controller=${playerController != null} ${playerControlLogContext()}" }
-    isScrubbingTimeline = false
-    scrubbingPositionMs = null
-    playerController?.seekTo(positionMs)
-    scheduleProgressSyncAfterSeek()
+    finishUserTimelineSeek(positionMs)
 }
 
 private fun PlayerScreenRuntime.playerControlLogContext(): String =

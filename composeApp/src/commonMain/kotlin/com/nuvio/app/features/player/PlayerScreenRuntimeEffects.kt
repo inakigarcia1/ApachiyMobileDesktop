@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.nuvio.app.features.details.MetaDetailsRepository
-import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -19,6 +18,7 @@ import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
 import com.nuvio.app.features.player.skip.SkipIntroRepository
 import com.nuvio.app.features.player.skip.SkipIntervalLookup
 import com.nuvio.app.features.player.skip.autoSkipKey
+import com.nuvio.app.features.player.agentqa.AgentQa
 import com.nuvio.app.features.player.skip.autoSkipKeysCompletedBy
 import com.nuvio.app.features.player.skip.resolveSkipIntervalLookup
 import com.nuvio.app.features.streams.BingeGroupCacheRepository
@@ -38,6 +38,16 @@ import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+    if (AgentQa.enabled) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                applyAgentQaCommand()
+                publishAgentQaSnapshot()
+                delay(400)
+            }
+        }
+    }
+
     val currentFeedback = liveGestureFeedback ?: gestureFeedback
     LaunchedEffect(currentFeedback) {
         if (currentFeedback != null) {
@@ -73,6 +83,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         playbackSnapshot = PlayerPlaybackSnapshot()
         isScrubbingTimeline = false
         scrubbingPositionMs = null
+        timelineHoldPositionMs = null
         liveGestureFeedback = null
         renderedGestureFeedback = null
         lockedOverlayVisible = false
@@ -252,19 +263,13 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
             return@LaunchedEffect
         }
         if (autoFetchedAddonSubtitlesForKey == fetchKey) return@LaunchedEffect
+        subtitlePipelineDone = false
         autoFetchedAddonSubtitlesForKey = fetchKey
         fetchAddonSubtitlesForActiveItem()
     }
 
-    LaunchedEffect(activeSourceUrl, subtitlePipelineDone) {
-        subtitlePipelineWaitExpired = false
-        if (subtitlePipelineDone) return@LaunchedEffect
-        delay(AddonSubtitleLoadingGate.PIPELINE_WAIT_MS)
-        subtitlePipelineWaitExpired = true
-        tryCompleteOpeningOverlay()
-    }
-
-    LaunchedEffect(playerController, selectedAddonSubtitleId, useCustomSubtitles) {
+    LaunchedEffect(playerController, selectedAddonSubtitleId, useCustomSubtitles, subtitlePipelineDone) {
+        if (subtitlePipelineJob != null && !subtitlePipelineDone) return@LaunchedEffect
         val controller = playerController ?: return@LaunchedEffect
         if (!useCustomSubtitles) return@LaunchedEffect
         val selectedId = selectedAddonSubtitleId ?: return@LaunchedEffect
@@ -391,6 +396,13 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
 
 @Composable
 private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
+    LaunchedEffect(playbackSnapshot.positionMs, timelineHoldPositionMs) {
+        val hold = timelineHoldPositionMs ?: return@LaunchedEffect
+        if (kotlin.math.abs(playbackSnapshot.positionMs - hold) <= 1_500L) {
+            timelineHoldPositionMs = null
+        }
+    }
+
     LaunchedEffect(
         controlsVisible,
         controlsActivityTick,

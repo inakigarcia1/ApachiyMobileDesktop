@@ -24,12 +24,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.LocalNuvioPlatformDensity
+import com.nuvio.app.core.network.ApachiyAddonAuth
+import com.nuvio.app.core.network.ApachiyConfig
+import com.nuvio.app.core.network.rewriteLocalDevUrl
 import com.nuvio.app.features.player.desktop.DesktopHostOs
 import com.nuvio.app.features.player.desktop.NativePlayerController
 import com.nuvio.app.features.player.desktop.NativePlayerHost
 import com.nuvio.app.features.player.desktop.desktopFullscreenChanges
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.player_error_unable_to_play_stream
+import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
+
+/** How long mpv may stay attached without demuxing anything before the source is declared dead. */
+private val PLAYBACK_STALL_TIMEOUT = 40.seconds
 
 @Composable
 actual fun PlatformPlayerSurface(
@@ -117,7 +130,10 @@ private fun NativePlayerSurface(
     val controller = remember(host) { NativePlayerController(host) }
     val hostFirstPaintComplete = remember { mutableStateOf(false) }
     val hostFirstFullSizePaintComplete = remember { mutableStateOf(false) }
-    val playbackHeaders = remember(sourceHeaders) { sanitizePlaybackHeaders(sourceHeaders) }
+    val playbackHeaders = remember(sourceUrl, sourceHeaders) {
+        desktopNativePlaybackHeaders(sourceUrl, sourceHeaders)
+    }
+    val playbackSourceUrl = remember(sourceUrl) { desktopNativePlaybackUrl(sourceUrl) }
     val latestOnPlayerControlsAction = rememberUpdatedState(onPlayerControlsAction)
     val latestOnPlayerControlsEvent = rememberUpdatedState(onPlayerControlsEvent)
     val latestOnPlayerControlsScrubChange = rememberUpdatedState(onPlayerControlsScrubChange)
@@ -161,7 +177,7 @@ private fun NativePlayerSurface(
         )
     }
 
-    DisposableEffect(controller, sourceAvailable, sourceUrl, playbackHeaders) {
+    DisposableEffect(controller, sourceAvailable, playbackSourceUrl, playbackHeaders) {
         onDispose { controller.dispose() }
     }
 
@@ -181,7 +197,7 @@ private fun NativePlayerSurface(
     LaunchedEffect(
         controller,
         sourceAvailable,
-        sourceUrl,
+        playbackSourceUrl,
         playbackHeaders,
         decoderPriority,
         nvidiaRtxSuperResolutionEnabled,
@@ -194,13 +210,13 @@ private fun NativePlayerSurface(
         }
         delay(16L)
         controller.attach(
-            sourceUrl = sourceUrl,
+            sourceUrl = playbackSourceUrl,
             sourceHeaders = playbackHeaders,
             playWhenReady = playWhenReady,
             initialPositionMs = initialPositionMs,
             decoderPriority = decoderPriority,
             nvidiaRtxSuperResolutionEnabled = nvidiaRtxSuperResolutionEnabled,
-            onError = { message -> latestOnError.value(message) },
+                onError = { message -> latestOnError.value(message) },
         )
         initialPositionRequestKey?.let { key ->
             latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
@@ -237,10 +253,30 @@ private fun NativePlayerSurface(
         coverNativeWhileLoading = false
         initialPlaybackReady = false
     }
+    val stallErrorMessage = stringResource(Res.string.player_error_unable_to_play_stream)
     LaunchedEffect(controller) {
+        var attachedAt: TimeMark? = null
+        var stallReported = false
         while (true) {
             val snapshot = controller.snapshot()
             val nativeAttached = controller.hasAttachedPlayer()
+            // mpv blocks indefinitely when the remote host accepts no TCP connection, so it
+            // never reports an error. Treat "attached but not a single byte demuxed" as a dead
+            // source and hand it to the regular playback error path.
+            if (!nativeAttached) {
+                attachedAt = null
+            } else if (attachedAt == null) {
+                attachedAt = TimeSource.Monotonic.markNow()
+            }
+            val stalled = !initialPlaybackReady &&
+                !stallReported &&
+                snapshot.durationMs <= 0L &&
+                snapshot.bufferedPositionMs <= 0L &&
+                (attachedAt?.elapsedNow() ?: Duration.ZERO) >= PLAYBACK_STALL_TIMEOUT
+            if (stalled) {
+                stallReported = true
+                latestOnError.value(stallErrorMessage)
+            }
             val shouldReveal = nativeAttached && !snapshot.isLoading && snapshot.durationMs > 0L
             if (shouldReveal) {
                 initialPlaybackReady = true
@@ -325,4 +361,26 @@ private class DesktopStubPlayerController : PlayerEngineController {
     override fun setSubtitleUri(url: String) = Unit
     override fun clearExternalSubtitle() = Unit
     override fun clearExternalSubtitleAndSelect(trackIndex: Int) = Unit
+}
+
+private fun desktopNativePlaybackUrl(sourceUrl: String): String =
+    rewriteLocalDevUrl(sourceUrl) ?: sourceUrl
+
+private fun desktopNativePlaybackHeaders(
+    sourceUrl: String,
+    sourceHeaders: Map<String, String>,
+): Map<String, String> {
+    val sanitized = sanitizePlaybackHeaders(sourceHeaders)
+    val playbackUrl = desktopNativePlaybackUrl(sourceUrl)
+    // Media-ticket URLs are already authorized via `?t=`. Adding Bearer here
+    // makes libmpv send both, which can stall native HTTP open.
+    if (playbackUrl.contains("?t=") || playbackUrl.contains("&t=")) return sanitized
+    val host = runCatching { io.ktor.http.Url(playbackUrl).host }
+        .getOrNull()
+        .orEmpty()
+    val apiHost = ApachiyAddonAuth.hostFromBaseUrl(ApachiyConfig.API_BASE_URL)
+    if (!ApachiyAddonAuth.shouldAttachAuth(host, apiHost)) return sanitized
+    val token = ApachiyAddonAuth.currentAccessToken()?.takeIf { it.isNotBlank() } ?: return sanitized
+    if (sanitized.keys.any { it.equals("Authorization", ignoreCase = true) }) return sanitized
+    return sanitized + ("Authorization" to "Bearer $token")
 }

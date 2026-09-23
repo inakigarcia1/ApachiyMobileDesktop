@@ -1181,6 +1181,11 @@
     <string name="settings_playback_subtitle_text_color">Text Color</string>
     <string name="settings_playback_subtitle_use_forced">Use Forced Subtitles</string>
     <string name="settings_playback_subtitle_use_forced_description">Prefer forced subtitles when audio matches the subtitle language; if unavailable, select nothing.</string>
+    <string name="settings_playback_subtitle_autosync">Sync subtitles automatically</string>
+    <string name="settings_playback_subtitle_autosync_description">Match the chosen subtitle to the audio.</string>
+    <string name="settings_playback_subtitle_autosync_needs_language">Choose a preferred subtitle language to turn this on.</string>
+    <string name="settings_playback_subtitle_autosync_aggressive">Aggressive sync</string>
+    <string name="settings_playback_subtitle_autosync_aggressive_description">Accept weaker matches so sync still runs.</string>
     <string name="settings_playback_subtitle_vertical_offset">Vertical Offset</string>
     <string name="settings_playback_skip_intro_outro_recap">Skip Intro</string>
     <string name="settings_playback_skip_intro_outro_recap_description">Use introdb.app to detect intros and recaps.</string>

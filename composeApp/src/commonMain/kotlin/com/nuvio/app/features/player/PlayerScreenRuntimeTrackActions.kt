@@ -139,6 +139,14 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
             }
         }
         PersistedSubtitleSelectionType.ADDON -> {
+            if (subtitlePipelineJob != null && !subtitlePipelineDone) {
+                return
+            }
+            if (selectedAddonSubtitleId != null && useCustomSubtitles) {
+                preferredSubtitleSelectionApplied = true
+                trackPreferenceRestoreApplied = true
+                return
+            }
             val persistedUrl = persistedAddonSubtitleUrlForItem(
                 preference = preference,
                 itemId = subtitlePreferenceItemId,
@@ -180,31 +188,29 @@ internal fun PlayerScreenRuntime.refreshTracks() {
 
     restorePersistedTrackPreferenceIfNeeded()
 
+    val contentOriginalLanguage = resolveContentLanguage(
+        language = metaUiState.meta?.language,
+        country = metaUiState.meta?.country,
+    ) ?: args.contentLanguage
     val preferredAudioTargets = resolvePreferredAudioLanguageTargets(
         preferredAudioLanguage = playerSettingsUiState.preferredAudioLanguage,
         secondaryPreferredAudioLanguage = playerSettingsUiState.secondaryPreferredAudioLanguage,
         deviceLanguages = DeviceLanguagePreferences.preferredLanguageCodes(),
-        contentOriginalLanguage = resolveContentLanguage(
-            language = metaUiState.meta?.language,
-            country = metaUiState.meta?.country,
-        ) ?: args.contentLanguage,
+        contentOriginalLanguage = contentOriginalLanguage,
     )
 
     if (!preferredAudioSelectionApplied) {
-        if (preferredAudioTargets.isEmpty()) {
-            preferredAudioSelectionApplied = true
-        } else if (audioTracks.isNotEmpty()) {
-            val preferredAudioIndex = findPreferredTrackIndex(
+        if (audioTracks.isNotEmpty()) {
+            val preferredAudioIndex = findPreferredOriginalAudioTrackIndex(
                 tracks = audioTracks,
-                targets = preferredAudioTargets,
-                language = ::resolveAudioTrackLanguageTarget,
+                contentOriginalLanguage = contentOriginalLanguage,
             )
             if (preferredAudioIndex >= 0 && preferredAudioIndex != selectedAudioIndex) {
                 playerController?.selectAudioTrack(preferredAudioIndex)
                 selectedAudioIndex = preferredAudioIndex
             }
-            preferredAudioSelectionApplied = true
         }
+        preferredAudioSelectionApplied = true
     }
 
     tryAutoSelectPreferredSubtitleFromAvailableTracks(preferredAudioTargets)
@@ -214,6 +220,7 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
     preferredAudioTargets: List<String>,
 ) {
     if (isUserExplicitSubtitleSelection) return
+    if (subtitlePipelineJob != null && !subtitlePipelineDone) return
 
     val preferredSubtitleLanguage = normalizeLanguageCode(
         playerSettingsUiState.preferredSubtitleLanguage,

@@ -15,6 +15,7 @@ import com.nuvio.app.features.details.MetaScreenSettingsUiState
 import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.p2p.P2pSettingsUiState
 import com.nuvio.app.features.p2p.P2pStreamingState
+import com.nuvio.app.features.player.embedded.DialogueTimingIndex
 import com.nuvio.app.features.player.skip.NextEpisodeInfo
 import com.nuvio.app.features.player.skip.SkipInterval
 import com.nuvio.app.features.streams.StreamsUiState
@@ -181,6 +182,8 @@ internal class PlayerScreenRuntime(
     var errorMessage by mutableStateOf<String?>(null)
     var isScrubbingTimeline by mutableStateOf(false)
     var scrubbingPositionMs by mutableStateOf<Long?>(null)
+    /** Keeps the timeline thumb at the user seek target until playback position catches up. */
+    var timelineHoldPositionMs by mutableStateOf<Long?>(null)
     var pausedOverlayVisible by mutableStateOf(false)
     var gestureFeedback by mutableStateOf<GestureFeedbackState?>(null)
     var liveGestureFeedback by mutableStateOf<GestureFeedbackState?>(null)
@@ -192,7 +195,6 @@ internal class PlayerScreenRuntime(
     var accumulatedSeekState by mutableStateOf<PlayerAccumulatedSeekState?>(null)
     var initialLoadCompleted by mutableStateOf(false)
     var subtitlePipelineDone by mutableStateOf(false)
-    var subtitlePipelineWaitExpired by mutableStateOf(false)
     var openingOverlayStartMark: TimeMark? = TimeSource.Monotonic.markNow()
     var speedBoostRestoreSpeed by mutableStateOf<Float?>(null)
     var isHoldToSpeedGestureActive by mutableStateOf(false)
@@ -258,9 +260,26 @@ internal class PlayerScreenRuntime(
     var hasScannedTextTracksOnce by mutableStateOf(false)
     var autoFetchedAddonSubtitlesForKey by mutableStateOf<String?>(null)
     var subtitlePipelineJob by mutableStateOf<Job?>(null)
+    var communityAutoSyncJob: Job? = null
+    var dialogueTimingIndex: DialogueTimingIndex? = null
+    var appliedAddonSubtitleUrl by mutableStateOf<String?>(null)
+    var addonSubtitleApplyInFlightUrl by mutableStateOf<String?>(null)
+    var preparedAddonSubtitlePlaybackUri: String? = null
     var trackPreferenceRestoreApplied by mutableStateOf(false)
     var subtitleDelayMs by mutableStateOf(0)
     var subtitleAutoSyncState by mutableStateOf(SubtitleAutoSyncUiState())
+    var agentQaPipeline by mutableStateOf("idle")
+    var agentQaSkipReason by mutableStateOf<String?>(null)
+    var agentQaHasEmbeddedSpanish by mutableStateOf(false)
+    var agentQaReferenceUsable by mutableStateOf(false)
+    var agentQaReferenceCueCount by mutableStateOf(0)
+    var agentQaCacheKey by mutableStateOf<String?>(null)
+    var agentQaAppliedCues by mutableStateOf<List<SubtitleSyncCue>>(emptyList())
+    var agentQaReferenceCues by mutableStateOf<List<SubtitleSyncCue>>(emptyList())
+    var agentQaSyncPass by mutableStateOf<Boolean?>(null)
+    var agentQaSyncMedianOffsetMs by mutableStateOf<Long?>(null)
+    var agentQaSyncResidualP80Ms by mutableStateOf<Long?>(null)
+    var agentQaSyncReason by mutableStateOf<String?>(null)
 
     var lastSyncedSettingsResizeMode: PlayerResizeMode? = null
     var lastResetPlaybackIdentity: String? = null

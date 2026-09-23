@@ -42,10 +42,15 @@ expect suspend fun httpRequestRaw(
     maxResponseBodyBytes: Int = DefaultRawHttpResponseMaxBytes,
 ): RawHttpResponse
 
+class HttpRangeBytes(
+    val bytes: ByteArray,
+    val resolvedUrl: String,
+)
+
 expect suspend fun httpGetBytesWithHeaders(
     url: String,
     headers: Map<String, String>,
     maxBytes: Int,
-): ByteArray?
+): HttpRangeBytes?
 
 expect suspend fun readLocalFilePrefix(path: String, maxBytes: Int): ByteArray?

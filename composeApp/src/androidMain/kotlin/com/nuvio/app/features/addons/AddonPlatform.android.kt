@@ -331,7 +331,7 @@ actual suspend fun httpGetBytesWithHeaders(
     url: String,
     headers: Map<String, String>,
     maxBytes: Int,
-): ByteArray? = withContext(Dispatchers.IO) {
+): HttpRangeBytes? = withContext(Dispatchers.IO) {
     runCatching {
         val builder = Request.Builder().url(url)
         headers.withoutAcceptEncoding().forEach { (key, value) ->
@@ -339,7 +339,8 @@ actual suspend fun httpGetBytesWithHeaders(
         }
         AddonHttpClientProvider.get().newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful && response.code != 206) return@use null
-            readAtMostBytes(response.body?.byteStream() ?: return@use null, maxBytes).bytes
+            val bytes = readAtMostBytes(response.body?.byteStream() ?: return@use null, maxBytes).bytes
+            HttpRangeBytes(bytes, response.request.url.toString())
         }
     }.getOrNull()
 }

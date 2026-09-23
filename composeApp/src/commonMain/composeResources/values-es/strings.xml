@@ -970,6 +970,11 @@
     <string name="settings_playback_subtitle_text_color">Color del texto</string>
     <string name="settings_playback_subtitle_use_forced">Usar subtítulos forzados</string>
     <string name="settings_playback_subtitle_use_forced_description">Prefiere los subtítulos forzados cuando coincidan con la configuración de idioma de los subtítulos.</string>
+    <string name="settings_playback_subtitle_autosync">Sincronizar subtítulos</string>
+    <string name="settings_playback_subtitle_autosync_description">Ajusta el subtítulo elegido para que coincida con el audio.</string>
+    <string name="settings_playback_subtitle_autosync_needs_language">Elegí un idioma de subtítulos para poder activarlo.</string>
+    <string name="settings_playback_subtitle_autosync_aggressive">Modo agresivo</string>
+    <string name="settings_playback_subtitle_autosync_aggressive_description">Acepta coincidencias más débiles para sincronizar igual.</string>
     <string name="settings_playback_subtitle_vertical_offset">Desplazamiento vertical</string>
     <string name="settings_playback_skip_intro_outro_recap">Saltar intro/outro/resumen</string>
     <string name="settings_playback_skip_intro_outro_recap_description">Mostrar botón de salto durante segmentos detectados de intro, outro y resumen.</string>

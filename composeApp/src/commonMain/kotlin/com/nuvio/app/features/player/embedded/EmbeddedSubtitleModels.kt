@@ -14,6 +14,7 @@ data class EmbeddedTextTrack(
     val cues: List<EmbeddedSubtitleCue>,
     val assHeader: String? = null,
     val trackNumber: Long = 0L,
+    val estimatedCueEnds: Boolean = false,
 )
 
 enum class EmbeddedTextCodec {
@@ -34,6 +35,7 @@ internal data class MkvLayout(
     val timestampScale: Long,
     val segmentDataOffset: Long,
     val cuesOffset: Long?,
+    val tracksOffset: Long? = null,
 )
 
 internal data class MkvCueRef(
@@ -41,6 +43,12 @@ internal data class MkvCueRef(
     val trackNumber: Long,
     val clusterPosition: Long,
     val relativePosition: Long?,
+)
+
+internal data class DialogueTimingIndex(
+    val hasEmbeddedSpanish: Boolean = false,
+    val tracks: List<EmbeddedTextTrack> = emptyList(),
+    val noSubtitleTracks: Boolean = false,
 )
 
 data class EmbeddedExtractResult(
@@ -55,21 +63,14 @@ data class MediaFileIdentity(
 )
 
 internal object AddonSubtitleLoadingGate {
-    const val PIPELINE_WAIT_MS = 45_000L
-
-    fun shouldBindPlayer(
-        pipelineDone: Boolean,
-        waitExpired: Boolean,
-    ): Boolean = pipelineDone || waitExpired
+    fun shouldBindPlayer(pipelineDone: Boolean): Boolean = pipelineDone
 
     fun shouldDismissOpeningOverlay(
         playerIsLoading: Boolean,
         pipelineDone: Boolean,
         playerBound: Boolean,
-        waitExpired: Boolean,
     ): Boolean {
-        if (!shouldBindPlayer(pipelineDone, waitExpired)) return false
-        if (!playerBound || playerIsLoading) return false
+        if (!pipelineDone || !playerBound || playerIsLoading) return false
         return true
     }
 }

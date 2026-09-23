@@ -378,6 +378,13 @@ let submitIntroDraft = {
   status: "",
 };
 let hasReceivedPlayerControls = false;
+// One-way latch: opening screen only for the first ready frame of a source, not seek/rebuffer.
+let openingOverlayCompleted = false;
+const noteOpeningOverlayCompleted = () => {
+  if (hasReceivedPlayerControls && !state.isLoading) {
+    openingOverlayCompleted = true;
+  }
+};
 let parentalGuideRunId = 0;
 let parentalGuideStartedKey = "";
 let parentalGuideCompletedKey = "";
@@ -1894,8 +1901,11 @@ const renderOpeningOverlay = suppress => {
 
   const hasProgress = progress !== null;
   const openingBootstrap = !hasReceivedPlayerControls;
-  const wantsOpening = Boolean(openingBootstrap || state.showOpeningOverlay);
+  const wantsOpening = Boolean(
+    !openingOverlayCompleted && (openingBootstrap || state.showOpeningOverlay),
+  );
   const showOpening = Boolean(!suppress && wantsOpening && state.isLoading);
+  noteOpeningOverlayCompleted();
   const titleText = String(state.openingTitle || state.title || "").trim();
   const messageText = String(state.openingMessage || "").trim();
   const showHorizontalProgress = hasProgress && !logoUrl;
@@ -2042,7 +2052,11 @@ const renderNativePlaybackPrompts = () => {
 };
 
 const isOpeningOverlayActive = () =>
-  Boolean((!hasReceivedPlayerControls || state.showOpeningOverlay) && state.isLoading);
+  Boolean(
+    !openingOverlayCompleted &&
+    (!hasReceivedPlayerControls || state.showOpeningOverlay) &&
+    state.isLoading,
+  );
 
 const isChromeInteractionTarget = target =>
   Boolean(target && target.closest && target.closest(chromeInteractionSelector));
@@ -2951,6 +2965,7 @@ window.playerUpdate = update => {
       (subtitleTracksChanged && activeModal === "subtitles")) {
     renderActiveModal();
   }
+  noteOpeningOverlayCompleted();
 };
 
 window.playerControls = nextState => {
@@ -2976,6 +2991,9 @@ window.playerControls = nextState => {
     preMuteVolumeLevel = state.volumeLevel;
   }
   hasReceivedPlayerControls = true;
+  if (nextState.showOpeningOverlay) {
+    openingOverlayCompleted = false;
+  }
   const closeToken = Number(state.closeModalsToken) || 0;
   const submitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
   if (closeToken !== previousCloseToken) {

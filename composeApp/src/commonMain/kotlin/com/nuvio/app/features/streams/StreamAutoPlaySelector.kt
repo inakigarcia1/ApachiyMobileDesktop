@@ -1,6 +1,7 @@
 package com.nuvio.app.features.streams
 
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.player.agentqa.AgentQa
 
 object StreamAutoPlaySelector {
 
@@ -230,6 +231,94 @@ object StreamAutoPlaySelector {
         val active = activeResolverProviderId?.trim().orEmpty()
         return active.isBlank() || this == null || equals(active, ignoreCase = true)
     }
+
+    private fun orderStreamsForAgentQa(streams: List<StreamItem>): List<StreamItem> {
+        if (streams.size <= 1) return streams
+        val ranked = streams.map { stream -> stream to parseStreamSizeBytes(stream) }
+        val compact = ranked
+            .filter { (_, bytes) -> bytes != null && bytes in AGENT_QA_MIN_BYTES..AGENT_QA_MAX_BYTES }
+            .sortedWith(
+                compareByDescending<Pair<StreamItem, Long?>> { (stream, _) ->
+                    agentQaLikelyHasEmbeddedReference(stream)
+                }.thenBy { it.second },
+            )
+            .map { it.first }
+        if (compact.isNotEmpty()) {
+            val rest = streams.filterNot { candidate -> compact.any { it === candidate } }
+            return compact + rest
+        }
+        val known = ranked.filter { it.second != null }.sortedBy { it.second }.map { it.first }
+        val unknown = ranked.filter { it.second == null }.map { it.first }
+        return if (known.isNotEmpty()) known + unknown else streams
+    }
+
+    fun identityMatchesRequestedEpisode(
+        season: Int?,
+        episode: Int?,
+        identityFilename: String?,
+        identitySizeBytes: Long? = null,
+        advertisedSizeBytes: Long? = null,
+    ): Boolean {
+        if (season == null || episode == null) return true
+        val parsed = parseSeasonEpisode(identityFilename)
+        if (parsed != null) {
+            return parsed.first == season && parsed.second == episode
+        }
+        if (identitySizeBytes != null && advertisedSizeBytes != null && advertisedSizeBytes > 0L) {
+            val inflated = identitySizeBytes > advertisedSizeBytes * 2L &&
+                identitySizeBytes - advertisedSizeBytes > 80L * 1024 * 1024
+            if (inflated) return false
+        }
+        return true
+    }
+
+    internal fun parseSeasonEpisode(filename: String?): Pair<Int, Int>? {
+        val text = filename?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        SEASON_EPISODE_IN_NAME.find(text)?.let { match ->
+            val season = match.groupValues[1].toIntOrNull() ?: return@let
+            val episode = match.groupValues[2].toIntOrNull() ?: return@let
+            return season to episode
+        }
+        SEASON_X_EPISODE_IN_NAME.find(text)?.let { match ->
+            val season = match.groupValues[2].toIntOrNull() ?: return@let
+            val episode = match.groupValues[3].toIntOrNull() ?: return@let
+            return season to episode
+        }
+        return null
+    }
+
+    private fun parseStreamSizeBytes(stream: StreamItem): Long? {
+        stream.behaviorHints.videoSize?.takeIf { it > 0L }?.let { return it }
+        val text = listOfNotNull(stream.name, stream.title, stream.description, stream.streamLabel)
+            .joinToString(" ")
+        val match = AGENT_QA_SIZE_IN_LABEL.find(text) ?: return null
+        val amount = match.groupValues[1].toDoubleOrNull() ?: return null
+        val multiplier = when (match.groupValues[2].uppercase()) {
+            "TB" -> 1024.0 * 1024 * 1024 * 1024
+            "GB" -> 1024.0 * 1024 * 1024
+            else -> 1024.0 * 1024
+        }
+        return (amount * multiplier).toLong()
+    }
+
+    private fun agentQaLikelyHasEmbeddedReference(stream: StreamItem): Boolean {
+        val text = listOfNotNull(
+            stream.behaviorHints.filename,
+            stream.name,
+            stream.title,
+            stream.description,
+            stream.streamLabel,
+        ).joinToString(" ")
+        return EMBEDDED_REFERENCE_HINT.containsMatchIn(text)
+    }
+
+    private val AGENT_QA_SIZE_IN_LABEL = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB)""", RegexOption.IGNORE_CASE)
+    private val SEASON_EPISODE_IN_NAME = Regex("""[sS](\d{1,2})[eE](\d{1,3})""")
+    private val SEASON_X_EPISODE_IN_NAME = Regex("""(^|[^0-9])(\d{1,2})[xX](\d{1,3})([^0-9]|$)""")
+    private val EMBEDDED_REFERENCE_HINT = Regex("""REMUX|BluRay|BDRemux|BDRip""", RegexOption.IGNORE_CASE)
+    private const val AGENT_QA_MIN_BYTES = 80L * 1024 * 1024
+    private const val AGENT_QA_MAX_BYTES = 12L * 1024 * 1024 * 1024
 }
 
 data class StreamAutoPlayEvaluation(
