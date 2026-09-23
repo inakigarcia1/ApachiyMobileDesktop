@@ -66,6 +66,7 @@ class AutoSyncIntegrationPolicyTest {
                 storedAggressive = false,
             ),
         )
+        assertEquals(0, effectiveSyncToleranceMs(operatorSettingsVisible = false, storedToleranceMs = 300))
     }
 
     @Test
@@ -100,6 +101,8 @@ class AutoSyncIntegrationPolicyTest {
         )
         assertFalse(effectiveAggressiveMode(operatorSettingsVisible = true, storedAggressive = false))
         assertTrue(effectiveAggressiveMode(operatorSettingsVisible = true, storedAggressive = true))
+        assertEquals(300, effectiveSyncToleranceMs(operatorSettingsVisible = true, storedToleranceMs = 300))
+        assertEquals(0, effectiveSyncToleranceMs(operatorSettingsVisible = true, storedToleranceMs = 750))
     }
 
     @Test

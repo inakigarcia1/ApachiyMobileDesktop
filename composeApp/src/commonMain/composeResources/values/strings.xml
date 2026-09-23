@@ -1164,6 +1164,8 @@
     <string name="settings_playback_selected_count">%1$d selected</string>
     <string name="settings_playback_show_loading_overlay">Loading Overlay</string>
     <string name="settings_playback_show_loading_overlay_description">Show loading screen until first video frame appears.</string>
+    <string name="settings_playback_pause_overlay">Pause Overlay</string>
+    <string name="settings_playback_pause_overlay_description">Show title details after 5 seconds while paused.</string>
     <string name="settings_playback_parental_guide">Content Warnings</string>
     <string name="settings_playback_parental_guide_description">Show parental guidance overlay when playback starts.</string>
     <string name="settings_playback_subtitle_background_color">Background Color</string>
@@ -1186,6 +1188,10 @@
     <string name="settings_playback_subtitle_autosync_needs_language">Choose a preferred subtitle language to turn this on.</string>
     <string name="settings_playback_subtitle_autosync_aggressive">Aggressive sync</string>
     <string name="settings_playback_subtitle_autosync_aggressive_description">Accept weaker matches so sync still runs.</string>
+    <string name="settings_playback_auto_sync_tolerance">Auto Sync tolerance: %1$s</string>
+    <string name="settings_playback_auto_sync_tolerance_description">Keep the original subtitle timing when the correction is no larger than this. Tap to change.</string>
+    <string name="settings_playback_auto_sync_tolerance_off">Off</string>
+    <string name="settings_playback_auto_sync_tolerance_value">%1$d ms</string>
     <string name="settings_playback_subtitle_vertical_offset">Vertical Offset</string>
     <string name="settings_playback_skip_intro_outro_recap">Skip Intro</string>
     <string name="settings_playback_skip_intro_outro_recap_description">Use introdb.app to detect intros and recaps.</string>

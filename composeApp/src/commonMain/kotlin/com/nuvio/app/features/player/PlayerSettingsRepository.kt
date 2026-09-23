@@ -34,6 +34,7 @@ fun snapToAllowedTimeout(value: Int): Int {
 
 data class PlayerSettingsUiState(
     val showLoadingOverlay: Boolean = true,
+    val pauseOverlayEnabled: Boolean = true,
     val showParentalGuide: Boolean = true,
     val resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
     val holdToSpeedEnabled: Boolean = true,
@@ -102,6 +103,7 @@ object PlayerSettingsRepository {
 
     private var hasLoaded = false
     private var showLoadingOverlay = true
+    private var pauseOverlayEnabled = true
     private var showParentalGuide = true
     private var resizeMode = PlayerResizeMode.Fit
     private var holdToSpeedEnabled = true
@@ -175,6 +177,7 @@ object PlayerSettingsRepository {
     fun clearLocalState() {
         hasLoaded = false
         showLoadingOverlay = true
+        pauseOverlayEnabled = true
         showParentalGuide = true
         resizeMode = PlayerResizeMode.Fit
         holdToSpeedEnabled = true
@@ -241,6 +244,7 @@ object PlayerSettingsRepository {
     private fun loadFromDisk() {
         hasLoaded = true
         showLoadingOverlay = PlayerSettingsStorage.loadShowLoadingOverlay() ?: true
+        pauseOverlayEnabled = PlayerSettingsStorage.loadPauseOverlayEnabled() ?: true
         showParentalGuide = PlayerSettingsStorage.loadShowParentalGuide() ?: true
         resizeMode = PlayerSettingsStorage.loadResizeMode()
             ?.let { runCatching { PlayerResizeMode.valueOf(it) }.getOrNull() }
@@ -392,6 +396,14 @@ object PlayerSettingsRepository {
         showLoadingOverlay = enabled
         publish()
         PlayerSettingsStorage.saveShowLoadingOverlay(enabled)
+    }
+
+    fun setPauseOverlayEnabled(enabled: Boolean) {
+        ensureLoaded()
+        if (pauseOverlayEnabled == enabled) return
+        pauseOverlayEnabled = enabled
+        publish()
+        PlayerSettingsStorage.savePauseOverlayEnabled(enabled)
     }
 
     fun setShowParentalGuide(enabled: Boolean) {
@@ -956,6 +968,7 @@ object PlayerSettingsRepository {
     private fun publish() {
         _uiState.value = PlayerSettingsUiState(
             showLoadingOverlay = showLoadingOverlay,
+            pauseOverlayEnabled = pauseOverlayEnabled,
             showParentalGuide = showParentalGuide,
             resizeMode = resizeMode,
             holdToSpeedEnabled = holdToSpeedEnabled,

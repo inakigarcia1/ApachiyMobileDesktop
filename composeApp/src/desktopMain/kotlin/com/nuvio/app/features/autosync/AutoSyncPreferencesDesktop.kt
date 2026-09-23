@@ -16,6 +16,12 @@ internal object AutoSyncPreferencesDesktop {
             saveAggressiveMode = { enabled ->
                 store.putBoolean(ProfileScopedKey.of("auto_sync_aggressive_mode"), enabled)
             },
+            loadSyncToleranceMs = {
+                store.getInt(ProfileScopedKey.of("auto_sync_tolerance_ms"))
+            },
+            saveSyncToleranceMs = { toleranceMs ->
+                store.putInt(ProfileScopedKey.of("auto_sync_tolerance_ms"), toleranceMs)
+            },
         )
     }
 }

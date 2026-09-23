@@ -5,7 +5,9 @@ import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
 import com.nuvio.app.features.autosync.AutoSyncSelectedRun
 import com.nuvio.app.features.autosync.effectiveAutoSyncEnabled
+import com.nuvio.app.features.autosync.effectiveSyncToleranceMs
 import com.nuvio.app.features.autosync.renderRetimedSrt
+import com.nuvio.app.features.autosync.selectedSubtitleWithinToleranceMs
 import com.nuvio.app.features.player.embedded.DialogueTimingIndex
 import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
 import com.nuvio.app.isIos
@@ -70,6 +72,21 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
         val timeline = AutoSyncSelectedRun.retime(index.tracks, cues)
         if (timeline == null) {
             showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
+            return@launch
+        }
+        val withinToleranceMs = selectedSubtitleWithinToleranceMs(
+            toleranceMs = effectiveSyncToleranceMs(
+                operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible,
+                storedToleranceMs = AutoSyncPreferencesRepository.syncToleranceMs.value,
+            ),
+            result = timeline,
+            selectedSubtitleKept = true,
+        )
+        if (withinToleranceMs != null) {
+            playerController?.setSubtitleDelayMs(0)
+            showAutoSyncNotice(
+                "Auto Sync V2 succeeded • in sync (within $withinToleranceMs ms tolerance)",
+            )
             return@launch
         }
         val rewritten = renderRetimedSrt(cues, timeline)

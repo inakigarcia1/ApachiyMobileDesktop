@@ -363,6 +363,9 @@ private fun PlaybackSettingsSection(
     val autoSyncAggressive by remember {
         AutoSyncPreferencesRepository.aggressiveMode
     }.collectAsStateWithLifecycle()
+    val autoSyncToleranceMs by remember {
+        AutoSyncPreferencesRepository.syncToleranceMs
+    }.collectAsStateWithLifecycle()
     val subtitleLanguageChosen = isChosenSubtitleLanguage(preferredSubtitleLanguage)
     val autoSyncShownOn = autoSyncOnStart && subtitleLanguageChosen
 
@@ -380,6 +383,14 @@ private fun PlaybackSettingsSection(
                     checked = showLoadingOverlay,
                     isTablet = isTablet,
                     onCheckedChange = PlayerSettingsRepository::setShowLoadingOverlay,
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.settings_playback_pause_overlay),
+                    description = stringResource(Res.string.settings_playback_pause_overlay_description),
+                    checked = autoPlayPlayerSettings.pauseOverlayEnabled,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setPauseOverlayEnabled,
                 )
                 SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
@@ -548,6 +559,30 @@ private fun PlaybackSettingsSection(
                         enabled = subtitleLanguageEnabled && autoSyncShownOn,
                         isTablet = isTablet,
                         onCheckedChange = AutoSyncPreferencesRepository::setAggressiveMode,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(
+                            Res.string.settings_playback_auto_sync_tolerance,
+                            if (autoSyncToleranceMs > 0) {
+                                stringResource(
+                                    Res.string.settings_playback_auto_sync_tolerance_value,
+                                    autoSyncToleranceMs,
+                                )
+                            } else {
+                                stringResource(Res.string.settings_playback_auto_sync_tolerance_off)
+                            },
+                        ),
+                        description = stringResource(
+                            Res.string.settings_playback_auto_sync_tolerance_description,
+                        ),
+                        enabled = subtitleLanguageEnabled && autoSyncShownOn,
+                        isTablet = isTablet,
+                        onClick = {
+                            val options = AutoSyncPreferencesRepository.syncToleranceOptionsMs
+                            val next = options[(options.indexOf(autoSyncToleranceMs) + 1) % options.size]
+                            AutoSyncPreferencesRepository.setSyncToleranceMs(next)
+                        },
                     )
                 }
                 SettingsGroupDivider(isTablet = isTablet)

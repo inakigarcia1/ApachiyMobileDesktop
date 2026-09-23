@@ -357,8 +357,8 @@
     <string name="compose_player_color">Color</string>
     <string name="compose_player_currently_playing">Reproduciendo ahora</string>
     <string name="compose_player_episode_code_episode_only">E%1$d</string>
-    <string name="compose_player_episode_code_full">S%1$dE%2$d</string>
-    <string name="compose_player_episode_title_format">S%1$dE%2$d • %3$s</string>
+    <string name="compose_player_episode_code_full">T%1$dE%2$d</string>
+    <string name="compose_player_episode_title_format">T%1$dE%2$d • %3$s</string>
     <string name="compose_player_episodes">Episodios</string>
     <string name="compose_player_font_size">Tamaño de fuente</string>
     <string name="compose_player_font_size_value">%1$dsp</string>
@@ -957,6 +957,8 @@
     <string name="settings_playback_selected_count">%1$d seleccionados</string>
     <string name="settings_playback_show_loading_overlay">Mostrar superposición de carga</string>
     <string name="settings_playback_show_loading_overlay_description">Mostrar la superposición de carga inicial mientras empieza a reproducirse un stream.</string>
+    <string name="settings_playback_pause_overlay">Overlay al pausar</string>
+    <string name="settings_playback_pause_overlay_description">Muestra los datos del título a los 5 segundos de pausa.</string>
     <string name="settings_playback_subtitle_background_color">Color de fondo</string>
     <string name="settings_playback_subtitle_bold">Atrevido</string>
     <string name="settings_playback_subtitle_bold_description">Utilice un peso de fuente de subtítulos más pesado.</string>
@@ -975,6 +977,18 @@
     <string name="settings_playback_subtitle_autosync_needs_language">Elegí un idioma de subtítulos para poder activarlo.</string>
     <string name="settings_playback_subtitle_autosync_aggressive">Modo agresivo</string>
     <string name="settings_playback_subtitle_autosync_aggressive_description">Acepta coincidencias más débiles para sincronizar igual.</string>
+    <string name="settings_playback_auto_sync_tolerance">Tolerancia de Auto Sync: %1$s</string>
+    <string name="settings_playback_auto_sync_tolerance_description">Conserva el tiempo original del subtítulo cuando el ajuste no supera este valor. Tocá para cambiar.</string>
+    <string name="settings_playback_auto_sync_tolerance_off">Desactivado</string>
+    <string name="settings_playback_auto_sync_tolerance_value">%1$d ms</string>
+    <string name="settings_playback_auto_skip_segments">Omisión automática</string>
+    <string name="settings_playback_auto_skip_none">Ninguna</string>
+    <string name="settings_playback_auto_skip_intro">Intro / Apertura</string>
+    <string name="settings_playback_auto_skip_intro_description">Saltar automáticamente las intros y aperturas de anime.</string>
+    <string name="settings_playback_auto_skip_recap">Resumen</string>
+    <string name="settings_playback_auto_skip_recap_description">Saltar automáticamente los segmentos de resumen.</string>
+    <string name="settings_playback_auto_skip_outro">Outro / Final</string>
+    <string name="settings_playback_auto_skip_outro_description">Saltar automáticamente los outros y finales de anime.</string>
     <string name="settings_playback_subtitle_vertical_offset">Desplazamiento vertical</string>
     <string name="settings_playback_skip_intro_outro_recap">Saltar intro/outro/resumen</string>
     <string name="settings_playback_skip_intro_outro_recap_description">Mostrar botón de salto durante segmentos detectados de intro, outro y resumen.</string>
@@ -1009,7 +1023,7 @@
     <string name="settings_playback_tunneled_playback">Reproducción tunneled</string>
     <string name="settings_playback_tunneled_playback_description">Activa la reproducción tunneled para una menor latencia en la sincronización de audio/video.</string>
     <string name="settings_tmdb_add_api_key_first">Añade tu propia clave API de TMDB abajo antes de activar el enriquecimiento.</string>
-    <string name="settings_tmdb_api_key_label">Clave API de TMDB</string>
+    <string name="settings_tmdb_api_key_label">Clave de API</string>
     <string name="settings_tmdb_enable_enrichment">Activar enriquecimiento TMDB</string>
     <string name="settings_tmdb_enable_enrichment_description">Usar tu clave API de TMDB para enriquecer metadatos del complemento en la pantalla de detalles cuando haya un ID de TMDB o IMDb disponible.</string>
     <string name="settings_tmdb_enter_api_key">Introduce tu clave API v3 de TMDB.</string>
@@ -1036,7 +1050,7 @@
     <string name="settings_tmdb_module_season_posters_description">Usar pósters de temporada de TMDB en el selector de temporadas de la pantalla de metadatos para series.</string>
     <string name="settings_tmdb_module_trailers">Tráilers</string>
     <string name="settings_tmdb_module_trailers_description">Obtener y mostrar la sección de vídeos de tráiler de TMDB en páginas de detalles.</string>
-    <string name="settings_tmdb_personal_api_key">Clave API personal</string>
+    <string name="settings_tmdb_personal_api_key">Clave de API personal</string>
     <string name="settings_tmdb_preferred_language">Idioma preferido</string>
     <string name="settings_tmdb_preferred_language_description">Configura el código de idioma de TMDB usado para metadatos localizados, por ejemplo `en`, `en-US` o `pt-BR`.</string>
     <string name="settings_tmdb_section_credentials">CREDENCIALES</string>

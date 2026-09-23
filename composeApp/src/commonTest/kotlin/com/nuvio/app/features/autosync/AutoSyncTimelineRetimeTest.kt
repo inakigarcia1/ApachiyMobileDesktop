@@ -668,6 +668,19 @@ class AutoSyncTimelineRetimeTest {
         assertTrue(checkpoints >= 4)
     }
 
+    @Test
+    fun maxAlignmentShiftCoversTheWholeSubtitleSpan() {
+        val reference = irregularTimeline(220)
+        val delayed = assertNotNull(
+            AutoSyncTimelineRetimer.retime(reference, shift(reference, -400L), 1.0, 0.0, true),
+        )
+        assertTrue(abs(delayed.maxAlignmentShiftMs() - abs(delayed.alignmentInterceptMs)) < 0.001)
+
+        val drifting = delayed.copy(alignmentScale = 1.002, alignmentInterceptMs = 0.0)
+        val lastStartMs = drifting.cues.last().originalStartTimeMs
+        assertTrue(abs(drifting.maxAlignmentShiftMs() - lastStartMs * 0.002) < 0.001)
+        assertTrue(drifting.maxAlignmentShiftMs() > 500.0)
+    }
 
     private fun shift(cues: List<SubtitleSyncCue>, deltaMs: Long) = cues.map { cue ->
         cue.copy(startTimeMs = cue.startTimeMs + deltaMs, endTimeMs = cue.endTimeMs + deltaMs)

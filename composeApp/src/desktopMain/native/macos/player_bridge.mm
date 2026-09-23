@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <dlfcn.h>
 #include <string>
 #include <vector>
@@ -128,6 +129,12 @@ static constexpr double kMaxVolumePercent = 200.0;
                                useLibass:(BOOL)useLibass
                                 stripSdh:(BOOL)stripSdh;
 - (void)handleScriptMessage:(NSDictionary *)message;
+- (void)startMpvEventDrain;
+- (void)scheduleMpvEventDrain;
+- (void)drainMpvEvents;
+- (void)stopMpvEventDrain;
+- (void)writeVolumePercent:(double)percent;
+- (void)applyVolumeSplit:(double)percent;
 - (void)focusControlsWebViewIfNeeded;
 - (void)layoutNativeSubviews;
 - (void)dispatchMediaKeyPlayerEvent:(NSString *)type;
@@ -1038,6 +1045,12 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     NSString *_lastConfiguredHdrKey;
     NSString *_lastResizeRefreshKey;
     dispatch_queue_t _mpvEventQueue;
+    dispatch_queue_t _mpvDrainQueue;
+    std::atomic_bool _mpvDrainStopped;
+    // True once mpv reports current-ao == avfoundation. That AO buffers deeply,
+    // so softvol changes lag. Its renderer volume (ao-volume) applies immediately.
+    std::atomic_bool _aoIsAvfoundation;
+    std::atomic<double> _requestedVolumePercent;
     BOOL _didFocusControlsWebView;
     BOOL _controlsWebReady;
     BOOL _fullscreenTransitionActive;
@@ -1091,6 +1104,10 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     _cachedLoading.store(true);
     _cachedEnded.store(false);
     _mpvEventQueue = dispatch_queue_create("com.nuvio.desktop.mpv-events", DISPATCH_QUEUE_SERIAL);
+    _mpvDrainQueue = dispatch_queue_create("com.nuvio.desktop.mpv-drain", DISPATCH_QUEUE_SERIAL);
+    _mpvDrainStopped.store(false);
+    _aoIsAvfoundation.store(false);
+    _requestedVolumePercent.store(100.0);
     _javaVm = javaVm;
     _eventSink = eventSink;
     _eventMethod = eventMethod;
@@ -1470,6 +1487,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
         NSString *reason = [NSString stringWithFormat:@"mpv_initialize failed: %s", mpv_error_string(initResult)];
         @throw [NSException exceptionWithName:@"PlayerBridgeError" reason:reason userInfo:nil];
     }
+    [self startMpvEventDrain];
 
     NSString *renderError = nil;
     if (![_videoView createMpvRenderContext:_mpv error:&renderError]) {
@@ -1769,6 +1787,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     if (_mpvEventQueue) {
         dispatch_sync(_mpvEventQueue, ^{});
     }
+    [self stopMpvEventDrain];
     [_videoView destroyMpvRenderContext];
     if (_mpv) {
         mpv_terminate_destroy(_mpv);
@@ -1845,22 +1864,98 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     return [self doubleProperty:"speed" fallback:_cachedSpeed.load()];
 }
 
+static void nuvioMpvWakeup(void *ctx) {
+    MpvWebPlayer *player = (__bridge MpvWebPlayer *)ctx;
+    [player scheduleMpvEventDrain];
+}
+
+- (void)startMpvEventDrain {
+    mpv_handle *mpv = _mpv;
+    if (!mpv) return;
+    _mpvDrainStopped.store(false);
+    mpv_observe_property(mpv, 2, "current-ao", MPV_FORMAT_STRING);
+    mpv_set_wakeup_callback(mpv, nuvioMpvWakeup, (__bridge void *)self);
+}
+
+- (void)scheduleMpvEventDrain {
+    if (_mpvDrainStopped.load()) return;
+    dispatch_queue_t queue = _mpvDrainQueue;
+    if (!queue) return;
+    dispatch_async(queue, ^{
+        [self drainMpvEvents];
+    });
+}
+
+- (void)drainMpvEvents {
+    if (_mpvDrainStopped.load()) return;
+    mpv_handle *mpv = _mpv;
+    if (!mpv) return;
+    for (;;) {
+        mpv_event *event = mpv_wait_event(mpv, 0);
+        if (!event || event->event_id == MPV_EVENT_NONE) break;
+        switch (event->event_id) {
+            case MPV_EVENT_PROPERTY_CHANGE: {
+                mpv_event_property *prop = (mpv_event_property *)event->data;
+                if (event->reply_userdata == 2 && prop && prop->format == MPV_FORMAT_STRING) {
+                    const char *ao = prop->data ? *(const char **)prop->data : NULL;
+                    BOOL isAvf = ao && strcmp(ao, "avfoundation") == 0;
+                    BOOL was = _aoIsAvfoundation.exchange(isAvf);
+                    if (isAvf && !was) {
+                        [self applyVolumeSplit:_requestedVolumePercent.load()];
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+}
+
+- (void)stopMpvEventDrain {
+    _mpvDrainStopped.store(true);
+    if (_mpv) {
+        mpv_set_wakeup_callback(_mpv, NULL, NULL);
+    }
+    if (_mpvDrainQueue) {
+        dispatch_sync(_mpvDrainQueue, ^{});
+    }
+}
+
 - (void)adjustVolume:(double)delta {
     if (!_mpv) return;
-    double current = [self doubleProperty:"volume" fallback:100.0];
-    double next = fmax(0.0, fmin(kMaxVolumePercent, current + delta));
-    mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &next);
+    double current = [self volume] * 100.0;
+    [self writeVolumePercent:current + delta];
 }
 
 - (void)setVolume:(double)level {
     if (!_mpv) return;
-    double next = fmax(0.0, fmin(kMaxVolumePercent, level * 100.0));
-    mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &next);
+    [self writeVolumePercent:level * 100.0];
+}
+
+- (void)writeVolumePercent:(double)percent {
+    double next = fmax(0.0, fmin(kMaxVolumePercent, percent));
+    _requestedVolumePercent.store(next);
+    [self applyVolumeSplit:next];
+}
+
+- (void)applyVolumeSplit:(double)percent {
+    mpv_handle *mpv = _mpv;
+    if (!mpv) return;
+    if (_aoIsAvfoundation.load()) {
+        double device = fmin(100.0, percent);
+        double soft = fmax(100.0, percent);
+        mpv_set_property_async(mpv, 0, "ao-volume", MPV_FORMAT_DOUBLE, &device);
+        mpv_set_property_async(mpv, 0, "volume", MPV_FORMAT_DOUBLE, &soft);
+    } else {
+        mpv_set_property_async(mpv, 0, "volume", MPV_FORMAT_DOUBLE, &percent);
+    }
 }
 
 - (double)volume {
-    double level = [self doubleProperty:"volume" fallback:100.0];
-    return fmax(0.0, fmin(kMaxVolumePercent, level)) / 100.0;
+    double soft = [self doubleProperty:"volume" fallback:100.0];
+    double device = _aoIsAvfoundation.load() ? [self doubleProperty:"ao-volume" fallback:100.0] : 100.0;
+    return fmax(0.0, fmin(kMaxVolumePercent, soft * device / 100.0)) / 100.0;
 }
 
 - (void)setResizeMode:(int)mode {
