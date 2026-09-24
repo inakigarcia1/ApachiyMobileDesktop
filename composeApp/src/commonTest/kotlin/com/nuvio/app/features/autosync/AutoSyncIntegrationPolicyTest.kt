@@ -57,7 +57,6 @@ class AutoSyncIntegrationPolicyTest {
             effectiveAutoSyncEnabled(
                 operatorSettingsVisible = false,
                 storedEnabled = false,
-                preferredLanguage = "none",
             ),
         )
         assertTrue(
@@ -70,33 +69,17 @@ class AutoSyncIntegrationPolicyTest {
     }
 
     @Test
-    fun debugBuildNeedsStoredFlagAndChosenLanguage() {
-        assertFalse(
+    fun debugBuildFollowsTheStoredSwitch() {
+        assertTrue(
             effectiveAutoSyncEnabled(
                 operatorSettingsVisible = true,
                 storedEnabled = true,
-                preferredLanguage = "none",
             ),
         )
         assertFalse(
             effectiveAutoSyncEnabled(
                 operatorSettingsVisible = true,
                 storedEnabled = false,
-                preferredLanguage = "es",
-            ),
-        )
-        assertTrue(
-            effectiveAutoSyncEnabled(
-                operatorSettingsVisible = true,
-                storedEnabled = true,
-                preferredLanguage = "es",
-            ),
-        )
-        assertTrue(
-            effectiveAutoSyncEnabled(
-                operatorSettingsVisible = true,
-                storedEnabled = true,
-                preferredLanguage = "device",
             ),
         )
         assertFalse(effectiveAggressiveMode(operatorSettingsVisible = true, storedAggressive = false))

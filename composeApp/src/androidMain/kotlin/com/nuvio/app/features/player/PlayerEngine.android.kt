@@ -525,9 +525,6 @@ private fun ExoPlayerSurface(
             sourceHeaders = sanitizedSourceHeaders,
             getSubtitleHeaders = { sanitizedSourceHeaders },
             getUseLibass = { useLibass },
-            getPreferredLanguage = {
-                PlayerSettingsRepository.uiState.value.preferredSubtitleLanguage
-            },
             onMimeTypeSelected = { mime -> selectedExternalSubtitleMimeType = mime },
             onSubtitleDelayChanged = { delay -> subtitleDelayMs = delay },
         )

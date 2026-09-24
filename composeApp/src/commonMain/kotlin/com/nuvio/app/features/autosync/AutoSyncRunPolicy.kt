@@ -15,16 +15,11 @@ internal fun isChosenSubtitleLanguage(language: String?): Boolean {
         !value.equals("forced", ignoreCase = true)
 }
 
-/** Debug builds follow the stored switches. Release builds always sync, aggressively. */
+/** Debug builds follow the stored switch. Release builds always sync. The run is always the Spanish subtitle. */
 internal fun effectiveAutoSyncEnabled(
     operatorSettingsVisible: Boolean,
     storedEnabled: Boolean,
-    preferredLanguage: String?,
-): Boolean = if (operatorSettingsVisible) {
-    storedEnabled && isChosenSubtitleLanguage(preferredLanguage)
-} else {
-    true
-}
+): Boolean = if (operatorSettingsVisible) storedEnabled else true
 
 internal fun effectiveAggressiveMode(
     operatorSettingsVisible: Boolean,

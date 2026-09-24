@@ -24,6 +24,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val TAG = "NuvioAutoSyncPlayer"
+private const val SPANISH_SYNC_LANGUAGE = "es"
 
 internal class AutoSyncPlayerCoordinator(
     private val context: Context,
@@ -34,7 +35,6 @@ internal class AutoSyncPlayerCoordinator(
     private val sourceHeaders: Map<String, String>,
     private val getSubtitleHeaders: (String) -> Map<String, String>,
     private val getUseLibass: () -> Boolean,
-    private val getPreferredLanguage: () -> String?,
     private val onMimeTypeSelected: (String) -> Unit,
     private val onSubtitleDelayChanged: (Int) -> Unit,
 ) {
@@ -124,7 +124,7 @@ internal class AutoSyncPlayerCoordinator(
                     selectedSubtitleUrl = snapshot.subtitleUrl,
                     selectedSubtitleHeaders = snapshot.subtitleHeaders,
                     selectedSubtitleBodyDeferred = CompletableDeferred(snapshot.originalBody),
-                    preferredLanguage = getPreferredLanguage(),
+                    preferredLanguage = SPANISH_SYNC_LANGUAGE,
                     alternativeSubtitles = emptyList(),
                     alternativeSubtitlesProvider = null,
                     excludedReferenceKeys = rejectedKeys,
@@ -289,11 +289,9 @@ internal class AutoSyncPlayerCoordinator(
         AutoSyncPreferencesRepository.ensureLoaded()
         val operatorVisible = com.nuvio.app.core.build.ApachiyProductSettings.operatorSettingsVisible
         val storedEnabled = AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value
-        val preferredLanguage = getPreferredLanguage()
         val enabled = effectiveAutoSyncEnabled(
             operatorSettingsVisible = operatorVisible,
             storedEnabled = storedEnabled,
-            preferredLanguage = preferredLanguage,
         )
         when (
             decideAutoSyncStart(
@@ -361,7 +359,7 @@ internal class AutoSyncPlayerCoordinator(
                 selectedSubtitleUrl = url,
                 selectedSubtitleHeaders = subtitleHeaders,
                 selectedSubtitleBodyDeferred = selectedSubtitleBodyDeferred,
-                preferredLanguage = getPreferredLanguage(),
+                preferredLanguage = SPANISH_SYNC_LANGUAGE,
                 alternativeSubtitles = candidateScope.alternativeCandidates(candidates),
                 alternativeSubtitlesProvider = if (candidateScope.usesAlternativeProvider) {
                     { candidates }

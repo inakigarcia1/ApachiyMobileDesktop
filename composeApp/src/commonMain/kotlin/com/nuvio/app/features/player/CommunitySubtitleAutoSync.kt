@@ -32,11 +32,9 @@ internal suspend fun PlayerScreenRuntime.loadDialogueTimingIndex(): DialogueTimi
 internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
     if (isIos) return
     AutoSyncPreferencesRepository.ensureLoaded()
-    val preferredLanguage = PlayerSettingsRepository.uiState.value.preferredSubtitleLanguage
     val enabled = effectiveAutoSyncEnabled(
         operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible,
         storedEnabled = AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value,
-        preferredLanguage = preferredLanguage,
     )
     if (!enabled) return
     if (dialogueTimingIndex?.hasEmbeddedSpanish == true) return

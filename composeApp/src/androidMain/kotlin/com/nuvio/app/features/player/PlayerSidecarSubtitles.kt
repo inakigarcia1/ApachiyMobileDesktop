@@ -29,6 +29,14 @@ import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 
 private const val SIDECAR_TAG = "NuvioSidecar"
+
+private fun readLocalSubtitleFile(url: String): String? {
+    val path = android.net.Uri.parse(url).path ?: return null
+    val file = java.io.File(path)
+    if (!file.isFile) return null
+    return file.readText(Charsets.UTF_8)
+}
+
 private val sidecarParserFactory = DefaultSubtitleParserFactory()
 private val mainHandler = Handler(Looper.getMainLooper())
 private const val SIDECAR_RENDER_INTERVAL_MS = 100L
@@ -165,6 +173,10 @@ internal class SidecarSubtitleController(
             try {
                 val rawBody = if (rawBodyLoader != null) {
                     rawBodyLoader()
+                } else if (url.startsWith("file:")) {
+                    withContext(Dispatchers.IO) {
+                        readLocalSubtitleFile(url)
+                    }
                 } else {
                     withContext(Dispatchers.IO) {
                         httpGetTextWithHeaders(url = url, headers = headers)
