@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.network.PlaybackActiveGuard
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
@@ -38,6 +39,11 @@ import org.jetbrains.compose.resources.getString
 
 @Composable
 internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+    DisposableEffect(Unit) {
+        PlaybackActiveGuard.isPlaybackActive = true
+        onDispose { PlaybackActiveGuard.isPlaybackActive = false }
+    }
+
     if (AgentQa.enabled) {
         LaunchedEffect(Unit) {
             while (true) {
@@ -59,6 +65,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         playerMetaVideos = MetaDetailsRepository.peek(parentMetaType, parentMetaId)?.videos ?: emptyList()
         if (playerMetaVideos.isEmpty()) {
             playerMetaVideos = MetaDetailsRepository.fetch(parentMetaType, parentMetaId)?.videos ?: emptyList()
+        }
+    }
+
+    LaunchedEffect(parentMetaType, parentMetaId, playerController, playbackSnapshot.isLoading) {
+        if (parentMetaId.isBlank()) return@LaunchedEffect
+        if (resolvePlaybackContentOriginalLanguage() != null) return@LaunchedEffect
+        val resolved = ensurePlaybackContentOriginalLanguageResolved() ?: return@LaunchedEffect
+        preferredAudioSelectionApplied = false
+        if (playerController != null && !playbackSnapshot.isLoading) {
+            refreshTracks()
         }
     }
 
@@ -100,6 +116,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         accumulatedSeekResetJob = null
         accumulatedSeekState = null
         speedBoostRestoreSpeed = null
+        playbackContentOriginalLanguage = null
         preferredAudioSelectionApplied = false
         preferredSubtitleSelectionApplied = false
         isUserExplicitSubtitleSelection = false
@@ -803,6 +820,7 @@ internal fun PlayerScreenRuntime.tryRefreshCredentialedSourceAfterError(message:
             season = season,
             episode = episode,
             forceRefresh = true,
+            runtimeMinutes = runtimeMinutes,
         )
 
         var refreshedStream: StreamItem? = null

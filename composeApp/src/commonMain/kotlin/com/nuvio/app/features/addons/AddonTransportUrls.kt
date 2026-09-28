@@ -13,6 +13,8 @@ internal fun buildAddonResourceUrl(
     type: String,
     id: String,
     extraPathSegment: String? = null,
+    manifestId: String = "",
+    runtimeMinutes: Int? = null,
 ): String {
     val encodedId = id.encodeAddonPathSegment()
     val baseUrl = addonTransportBaseUrl(manifestUrl)
@@ -24,7 +26,12 @@ internal fun buildAddonResourceUrl(
     } else {
         "$baseUrl/$resource/$type/$encodedId/$extraPathSegment.json"
     }
-    return (resourceUrl + query).encodeUnsafeHttpUrlCharacters()
+    val url = (resourceUrl + query).encodeUnsafeHttpUrlCharacters()
+    return if (resource == "stream") {
+        appendPlaybackCapabilitiesQuery(url, manifestUrl, manifestId, runtimeMinutes)
+    } else {
+        url
+    }
 }
 
 

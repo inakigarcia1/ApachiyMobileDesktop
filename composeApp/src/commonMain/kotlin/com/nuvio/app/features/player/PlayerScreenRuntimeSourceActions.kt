@@ -244,6 +244,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
                         season = activeSeasonNumber,
                         episode = activeEpisodeNumber,
                         forceRefresh = true,
+                        runtimeMinutes = runtimeMinutes,
                     )
                 }
             },
@@ -303,6 +304,7 @@ internal fun PlayerScreenRuntime.switchToEpisodeStream(stream: StreamItem, episo
                     season = episode.season,
                     episode = episode.episode,
                     forceRefresh = true,
+                    runtimeMinutes = episode.runtime ?: runtimeMinutes,
                 )
             },
         )
@@ -413,6 +415,7 @@ internal fun PlayerScreenRuntime.openSourcesPanel() {
         videoId = vid,
         season = activeSeasonNumber,
         episode = activeEpisodeNumber,
+        runtimeMinutes = runtimeMinutes,
     )
     showSourcesPanel = true
     showEpisodesPanel = false

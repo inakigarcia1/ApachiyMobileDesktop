@@ -86,6 +86,7 @@ internal fun PlayerDestination(
         torrentTrackers = launch.torrentTrackers,
         initialPositionMs = launch.initialPositionMs,
         initialProgressFraction = launch.initialProgressFraction,
+        runtimeMinutes = launch.runtimeMinutes,
         contentLanguage = launch.contentLanguage,
         onBack = onBack,
         onSystemBackHandlerChanged = registerSystemBack,

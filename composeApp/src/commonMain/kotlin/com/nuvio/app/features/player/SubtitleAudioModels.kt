@@ -152,9 +152,24 @@ data class SubtitleAudioUiState(
     val showSubtitleModal: Boolean = false,
 )
 
+internal fun sanitizePlayerTrackDisplayLabel(label: String?): String? {
+    if (label.isNullOrBlank()) return null
+    val siteLine = Regex("""(www\.|https?://).+""", RegexOption.IGNORE_CASE)
+    var cleaned = label.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.matches(siteLine) }
+        .joinToString(" ")
+    cleaned = cleaned.replace(Regex("""\s*[-–—]\s*www\.[^\s]+""", RegexOption.IGNORE_CASE), "")
+    cleaned = cleaned.replace(Regex("""\s+www\.[^\s]+""", RegexOption.IGNORE_CASE), "")
+    cleaned = cleaned.replace(Regex("""\s*[-–—]\s*https?://[^\s]+""", RegexOption.IGNORE_CASE), "")
+    cleaned = cleaned.trim().trimEnd('-', '–', '—').trim()
+    if (cleaned.matches(siteLine)) return null
+    return cleaned.takeIf { it.isNotBlank() }
+}
+
 @Composable
 fun localizedTrackDisplayName(label: String?, language: String?, index: Int): String {
-    if (!label.isNullOrBlank()) return label
+    sanitizePlayerTrackDisplayLabel(label)?.let { return it }
     if (!language.isNullOrBlank()) return languageLabelForCode(language)
     return stringResource(Res.string.compose_player_track_number, index + 1)
 }

@@ -59,7 +59,6 @@ import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.player.AndroidLibmpvVideoOutput
 import com.nuvio.app.features.player.AndroidPlaybackEngine
-import com.nuvio.app.features.player.AudioLanguageOption
 import com.nuvio.app.features.player.AvailableLanguageOptions
 import com.nuvio.app.features.player.ExternalPlayerApp
 import com.nuvio.app.features.player.ExternalPlayerPlatform
@@ -105,8 +104,6 @@ internal fun LazyListScope.playbackSettingsContent(
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
     touchGesturesEnabled: Boolean,
-    preferredAudioLanguage: String,
-    secondaryPreferredAudioLanguage: String?,
     preferredSubtitleLanguage: String,
     secondaryPreferredSubtitleLanguage: String?,
     streamReuseLastLinkEnabled: Boolean,
@@ -128,8 +125,6 @@ internal fun LazyListScope.playbackSettingsContent(
             holdToSpeedEnabled = holdToSpeedEnabled,
             holdToSpeedValue = holdToSpeedValue,
             touchGesturesEnabled = touchGesturesEnabled,
-            preferredAudioLanguage = preferredAudioLanguage,
-            secondaryPreferredAudioLanguage = secondaryPreferredAudioLanguage,
             preferredSubtitleLanguage = preferredSubtitleLanguage,
             secondaryPreferredSubtitleLanguage = secondaryPreferredSubtitleLanguage,
             streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
@@ -281,8 +276,6 @@ private fun PlaybackSettingsSection(
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
     touchGesturesEnabled: Boolean,
-    preferredAudioLanguage: String,
-    secondaryPreferredAudioLanguage: String?,
     preferredSubtitleLanguage: String,
     secondaryPreferredSubtitleLanguage: String?,
     streamReuseLastLinkEnabled: Boolean,
@@ -297,8 +290,6 @@ private fun PlaybackSettingsSection(
     useLibass: Boolean,
     libassRenderType: String,
 ) {
-    var showPreferredAudioDialog by remember { mutableStateOf(false) }
-    var showSecondaryAudioDialog by remember { mutableStateOf(false) }
     var showPreferredSubtitleDialog by remember { mutableStateOf(false) }
     var pendingAutoSyncLanguage by remember { mutableStateOf(false) }
     var showSecondarySubtitleDialog by remember { mutableStateOf(false) }
@@ -483,39 +474,15 @@ private fun PlaybackSettingsSection(
             title = stringResource(Res.string.settings_playback_section_subtitle_audio),
             isTablet = isTablet,
         ) {
-            // Subtitle/Audio settings enable/disable logic:
-            // Internal: everything enabled
-            // External + forwarding enabled: subtitle language pickers enabled, other subtitle options disabled
-            // External + forwarding disabled: entire subtitle section disabled
-            // External: audio language pickers always disabled (external player manages audio tracks)
+            // Internal: subtitle options enabled.
+            // External + forwarding: subtitle language pickers stay enabled.
+            // External without forwarding: subtitle options disabled.
             val isExternalPlayer = autoPlayPlayerSettings.externalPlayerEnabled
             val isForwardingSubtitles = autoPlayPlayerSettings.externalPlayerForwardSubtitles
-            val audioLanguageEnabled = !isExternalPlayer
             val subtitleLanguageEnabled = !isExternalPlayer || isForwardingSubtitles
             val otherSubtitleOptionsEnabled = !isExternalPlayer
 
             SettingsGroup(isTablet = isTablet) {
-                SettingsNavigationRow(
-                    title = stringResource(Res.string.settings_playback_preferred_audio_language),
-                    description = when (preferredAudioLanguage) {
-                        AudioLanguageOption.DEFAULT -> stringResource(Res.string.settings_playback_option_default)
-                        AudioLanguageOption.DEVICE -> stringResource(Res.string.settings_playback_option_device_language)
-                        AudioLanguageOption.ORIGINAL -> stringResource(Res.string.settings_playback_option_original)
-                        else -> languageLabelForCode(preferredAudioLanguage)
-                    },
-                    enabled = audioLanguageEnabled,
-                    isTablet = isTablet,
-                    onClick = { showPreferredAudioDialog = true },
-                )
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsNavigationRow(
-                    title = stringResource(Res.string.settings_playback_secondary_audio_language),
-                    description = languageLabelForCode(secondaryPreferredAudioLanguage),
-                    enabled = audioLanguageEnabled,
-                    isTablet = isTablet,
-                    onClick = { showSecondaryAudioDialog = true },
-                )
-                SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_playback_preferred_subtitle_language),
                     description = when (preferredSubtitleLanguage) {
@@ -821,6 +788,13 @@ private fun PlaybackSettingsSection(
                     }
                 }
             }
+        }
+
+        SettingsSection(
+            title = stringResource(Res.string.settings_playback_torbox_speed_title),
+            isTablet = isTablet,
+        ) {
+            TorboxSpeedSettingsGroup(isTablet = isTablet)
         }
 
         SettingsSection(
@@ -1376,26 +1350,6 @@ private fun PlaybackSettingsSection(
         }
     }
 
-    if (showPreferredAudioDialog) {
-        val originalHint = stringResource(Res.string.settings_playback_option_original_hint)
-        LanguageSelectionDialog(
-            title = stringResource(Res.string.settings_playback_preferred_audio_language),
-            options = listOf(
-                LanguageSelectionOption(AudioLanguageOption.DEFAULT, stringResource(Res.string.settings_playback_option_default)),
-                LanguageSelectionOption(AudioLanguageOption.DEVICE, stringResource(Res.string.settings_playback_option_device_language)),
-                LanguageSelectionOption(AudioLanguageOption.ORIGINAL, stringResource(Res.string.settings_playback_option_original), description = originalHint),
-            ) + AvailableLanguageOptions.map { option ->
-                LanguageSelectionOption(option.code, stringResource(option.labelRes))
-            },
-            selectedValue = preferredAudioLanguage,
-            onSelect = { value ->
-                PlayerSettingsRepository.setPreferredAudioLanguage(value ?: AudioLanguageOption.DEVICE)
-                showPreferredAudioDialog = false
-            },
-            onDismiss = { showPreferredAudioDialog = false },
-        )
-    }
-
     if (showP2pProfileDialog && !isDesktop) {
         IosEnumSelectionDialog(
             title = stringResource(Res.string.settings_p2p_profile_title),
@@ -1432,25 +1386,6 @@ private fun PlaybackSettingsSection(
                 showP2pCacheSizeDialog = false
             },
             onDismiss = { showP2pCacheSizeDialog = false },
-        )
-    }
-
-    if (showSecondaryAudioDialog) {
-        val originalHint = stringResource(Res.string.settings_playback_option_original_hint)
-        LanguageSelectionDialog(
-            title = stringResource(Res.string.settings_playback_secondary_audio_language),
-            options = listOf(
-                LanguageSelectionOption(null, stringResource(Res.string.settings_playback_option_none)),
-                LanguageSelectionOption(AudioLanguageOption.ORIGINAL, stringResource(Res.string.settings_playback_option_original), description = originalHint),
-            ) + AvailableLanguageOptions.map { option ->
-                LanguageSelectionOption(option.code, stringResource(option.labelRes))
-            },
-            selectedValue = secondaryPreferredAudioLanguage,
-            onSelect = { value ->
-                PlayerSettingsRepository.setSecondaryPreferredAudioLanguage(value)
-                showSecondaryAudioDialog = false
-            },
-            onDismiss = { showSecondaryAudioDialog = false },
         )
     }
 

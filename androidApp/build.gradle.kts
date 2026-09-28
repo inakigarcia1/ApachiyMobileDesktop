@@ -37,8 +37,8 @@ fun envOrLocalProperty(key: String): String? =
         ?: localProps.getProperty(key)?.trim()?.takeIf { it.isNotBlank() }
 
 val sentryAuthToken = envOrLocalProperty("SENTRY_AUTH_TOKEN")
-val sentryOrg = envOrLocalProperty("SENTRY_ORG")
-val sentryProject = envOrLocalProperty("SENTRY_PROJECT")
+val sentryOrg = envOrLocalProperty("SENTRY_ORG") ?: "apachiy"
+val sentryProject = envOrLocalProperty("SENTRY_PROJECT") ?: "apachiy-android"
 val sentryMappingUploadEnabled = sentryAuthToken != null && sentryOrg != null && sentryProject != null
 val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
 val releaseAppVersionName = readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")

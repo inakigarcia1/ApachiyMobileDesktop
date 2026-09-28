@@ -2,9 +2,10 @@ package com.nuvio.app.features.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.nuvio.app.core.diagnostics.SentryConfig
 
 internal actual object SentrySettingsPlatform {
-    actual val crashReportsSupported: Boolean = true
+    actual val crashReportsSupported: Boolean = SentryConfig.DSN.isNotBlank()
     actual val usesDesktopCopy: Boolean = false
 }
 

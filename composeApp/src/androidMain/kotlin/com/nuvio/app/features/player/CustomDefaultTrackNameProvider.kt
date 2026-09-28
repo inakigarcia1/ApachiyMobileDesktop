@@ -25,13 +25,12 @@ class CustomDefaultTrackNameProvider(resources: Resources) : DefaultTrackNamePro
             }
         }
 
-        if (format.label != null) {
-            if (!trackName.startsWith(format.label!!)) {
-                trackName += " - ${format.label}"
-            }
+        val embeddedLabel = sanitizePlayerTrackDisplayLabel(format.label)
+        if (embeddedLabel != null && !trackName.startsWith(embeddedLabel)) {
+            trackName += " - $embeddedLabel"
         }
 
-        return trackName
+        return sanitizePlayerTrackDisplayLabel(trackName) ?: trackName
     }
 
     companion object {

@@ -39,6 +39,7 @@ internal typealias ContentPlayAction = (
     episodeThumbnail: String?,
     pauseDescription: String?,
     resumePositionMs: Long?,
+    runtimeMinutes: Int?,
 ) -> Unit
 
 @Composable

@@ -527,10 +527,7 @@ fun resolvePreferredAudioLanguageTargets(
                     normalize(secondaryPreferredAudioLanguage),
                 ).distinct()
             } else {
-                // Fallback to device languages when original language is unknown
-                (deviceLanguages.mapNotNull(::normalize)
-                    + listOfNotNull(normalize(secondaryPreferredAudioLanguage))
-                ).distinct()
+                emptyList()
             }
         }
 

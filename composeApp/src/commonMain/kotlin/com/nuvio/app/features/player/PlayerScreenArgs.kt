@@ -47,5 +47,6 @@ internal data class PlayerScreenArgs(
     val torrentTrackers: List<String>,
     val initialPositionMs: Long,
     val initialProgressFraction: Float?,
+    val runtimeMinutes: Int? = null,
     val contentLanguage: String? = null,
 )

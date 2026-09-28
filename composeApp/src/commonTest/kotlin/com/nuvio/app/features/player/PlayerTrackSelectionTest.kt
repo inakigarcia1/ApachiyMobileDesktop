@@ -363,6 +363,33 @@ class PlayerTrackSelectionTest {
         assertNull(persistedAddonSubtitleUrlForItem(preference, "series|1|2"))
     }
 
+    @Test
+    fun originalAudioPrefersFeatureMixOverDubsAndCommentaryWhenLanguageIsUnknown() {
+        val tracks = listOf(
+            AudioTrack(index = 0, id = "0", label = "DUB (5.1(side), E-AC-3)", language = "ru"),
+            AudioTrack(index = 1, id = "1", label = "MVO (Jaskier) (unknown8, DTS)", language = "ru"),
+            AudioTrack(index = 18, id = "18", label = "Dolby Atmos/TrueHD Audio / 7.1-Atmos", language = "en"),
+            AudioTrack(index = 19, id = "19", label = "Compatibility Track / Dolby Digital Audio", language = "en"),
+            AudioTrack(index = 20, id = "20", label = "Commentary by philosopher Dr. Cornel West", language = "en"),
+        )
+
+        val unknown = findPreferredOriginalAudioTrackIndex(tracks, contentOriginalLanguage = null)
+        val english = findPreferredOriginalAudioTrackIndex(tracks, contentOriginalLanguage = "en")
+        assertEquals("Dolby Atmos/TrueHD Audio / 7.1-Atmos", tracks[unknown].label)
+        assertEquals("Dolby Atmos/TrueHD Audio / 7.1-Atmos", tracks[english].label)
+    }
+
+    @Test
+    fun originalAudioFollowsContentLanguageWhenItIsKnown() {
+        val tracks = listOf(
+            AudioTrack(index = 0, id = "0", label = "DUB", language = "ru"),
+            AudioTrack(index = 1, id = "1", label = "TrueHD", language = "en"),
+            AudioTrack(index = 2, id = "2", label = "TrueHD", language = "fr"),
+        )
+
+        assertEquals(2, findPreferredOriginalAudioTrackIndex(tracks, contentOriginalLanguage = "fr"))
+    }
+
     private fun audioTrack(language: String?) = AudioTrack(
         index = 0,
         id = "audio-0",

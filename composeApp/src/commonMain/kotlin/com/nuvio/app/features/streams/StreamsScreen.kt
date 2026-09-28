@@ -138,6 +138,7 @@ fun StreamsScreen(
     resumeProgressFraction: Float? = null,
     manualSelection: Boolean = false,
     startFromBeginning: Boolean = false,
+    runtimeMinutes: Int? = null,
     onStreamSelected: (stream: StreamItem, resumePositionMs: Long?, resumeProgressFraction: Float?) -> Unit = { _, _, _ -> },
     onStreamActionOpen: (
         stream: StreamItem,
@@ -219,7 +220,7 @@ fun StreamsScreen(
         }
     }
 
-    LaunchedEffect(type, videoId, seasonNumber, episodeNumber, manualSelection) {
+    LaunchedEffect(type, videoId, seasonNumber, episodeNumber, manualSelection, runtimeMinutes) {
         StreamsRepository.load(
             type = type,
             videoId = videoId,
@@ -227,6 +228,7 @@ fun StreamsScreen(
             season = seasonNumber,
             episode = episodeNumber,
             manualSelection = manualSelection,
+            runtimeMinutes = runtimeMinutes,
         )
     }
 
@@ -262,6 +264,7 @@ fun StreamsScreen(
             season = seasonNumber,
             episode = episodeNumber,
             manualSelection = manualSelection,
+            runtimeMinutes = runtimeMinutes,
         )
     }
 

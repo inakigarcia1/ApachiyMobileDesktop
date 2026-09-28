@@ -19,6 +19,9 @@ data class StreamLaunch(
     val resumeProgressFraction: Float? = null,
     val manualSelection: Boolean = false,
     val startFromBeginning: Boolean = false,
+    val runtimeMinutes: Int? = null,
+    /** ISO 639-1 original language for default audio track selection. */
+    val contentLanguage: String? = null,
 )
 
 object StreamLaunchStore {

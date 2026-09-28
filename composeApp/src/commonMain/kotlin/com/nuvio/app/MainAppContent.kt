@@ -115,6 +115,7 @@ import com.nuvio.app.features.player.ExternalPlayerIntentResult
 import com.nuvio.app.features.player.ExternalPlayerPlatform
 import com.nuvio.app.features.player.PlayerLaunch
 import com.nuvio.app.features.player.PlayerLaunchStore
+import com.nuvio.app.features.player.resolveContentLanguage
 import com.nuvio.app.features.player.agentqa.AgentQa
 import com.nuvio.app.features.player.agentqa.AgentQaPlaybackRequests
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
@@ -483,6 +484,12 @@ internal fun MainAppContent(
         EpisodeReleaseNotificationsRepository.refreshAsync()
         kotlinx.coroutines.delay(5_000)
         initialHomeReady = true
+    }
+
+    LaunchedEffect(ownsAppRuntime) {
+        if (!ownsAppRuntime) return@LaunchedEffect
+        com.nuvio.app.features.network.TorboxSpeedTestHarness.initializePlatform()
+        com.nuvio.app.features.network.TorboxSpeedTestCoordinator.scheduleBackgroundCheck()
     }
 
     LaunchedEffect(networkStatusUiState.condition) {
@@ -955,10 +962,16 @@ internal fun MainAppContent(
             resumeProgressFraction: Float?,
             manualSelection: Boolean,
             startFromBeginning: Boolean,
+            runtimeMinutes: Int? = null,
         ) {
             fun proceed() {
                 val targetResumePositionMs = if (startFromBeginning) 0L else (resumePositionMs ?: 0L)
                 val targetResumeProgressFraction = if (startFromBeginning) null else resumeProgressFraction
+                val peekedMeta = MetaDetailsRepository.peek(parentMetaType, parentMetaId)
+                val launchContentLanguage = resolveContentLanguage(
+                    language = peekedMeta?.language,
+                    country = peekedMeta?.country,
+                )
 
                 if (!manualSelection && AppFeaturePolicy.downloadsEnabled) {
                     val downloadedItem = DownloadsRepository.findPlayableDownload(
@@ -994,6 +1007,7 @@ internal fun MainAppContent(
                             parentMetaType = parentMetaType,
                             initialPositionMs = targetResumePositionMs,
                             initialProgressFraction = targetResumeProgressFraction,
+                            contentLanguage = launchContentLanguage,
                         )
                         if (externalPlayerSupported && playerSettingsUiState.externalPlayerEnabled) {
                             coroutineScope.launch { openExternalPlayback(playerLaunch) }
@@ -1025,6 +1039,8 @@ internal fun MainAppContent(
                         resumeProgressFraction = targetResumeProgressFraction,
                         manualSelection = manualSelection,
                         startFromBeginning = startFromBeginning,
+                        runtimeMinutes = runtimeMinutes,
+                        contentLanguage = launchContentLanguage,
                     ),
                 )
                 navController.navigate(
@@ -1043,7 +1059,7 @@ internal fun MainAppContent(
         }
 
         val onPlay: ContentPlayAction =
-            { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->
+            { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs, runtimeMinutes ->
                 launchPlaybackWithDownloadPreference(
                     type = type,
                     videoId = videoId,
@@ -1062,11 +1078,12 @@ internal fun MainAppContent(
                     resumeProgressFraction = null,
                     manualSelection = false,
                     startFromBeginning = false,
+                    runtimeMinutes = runtimeMinutes,
                 )
             }
 
         val onPlayManually: ContentPlayAction =
-            { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs ->
+            { type, videoId, parentMetaId, parentMetaType, title, logo, poster, background, seasonNumber, episodeNumber, episodeTitle, episodeThumbnail, pauseDescription, resumePositionMs, runtimeMinutes ->
                 launchPlaybackWithDownloadPreference(
                     type = type,
                     videoId = videoId,
@@ -1085,6 +1102,7 @@ internal fun MainAppContent(
                     resumeProgressFraction = null,
                     manualSelection = true,
                     startFromBeginning = false,
+                    runtimeMinutes = runtimeMinutes,
                 )
             }
 

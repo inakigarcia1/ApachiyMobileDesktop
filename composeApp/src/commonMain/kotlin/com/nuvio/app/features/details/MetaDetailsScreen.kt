@@ -185,8 +185,8 @@ fun MetaDetailsScreen(
     type: String,
     id: String,
     onBack: () -> Unit,
-    onPlay: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
-    onPlayManually: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)? = null,
+    onPlay: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?, runtimeMinutes: Int?) -> Unit)? = null,
+    onPlayManually: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?, runtimeMinutes: Int?) -> Unit)? = null,
     onOpenMeta: ((MetaPreview) -> Unit)? = null,
     onCastClick: ((MetaPerson, String?) -> Unit)? = null,
     onCompanyClick: ((MetaCompany, String) -> Unit)? = null,
@@ -758,6 +758,10 @@ fun MetaDetailsScreen(
                                 seriesAction.episodeThumbnail,
                                 seriesPauseDescription,
                                 seriesAction.resumePositionMs,
+                                meta.runtimeMinutesForPlayback(
+                                    seriesAction.seasonNumber,
+                                    seriesAction.episodeNumber,
+                                ),
                             )
                         }
 
@@ -777,6 +781,7 @@ fun MetaDetailsScreen(
                                 null,
                                 meta.description,
                                 movieProgress?.lastPositionMs,
+                                meta.runtimeMinutesForPlayback(null, null),
                             )
                         }
                     }
@@ -804,6 +809,10 @@ fun MetaDetailsScreen(
                                         seriesAction.episodeThumbnail,
                                         seriesPauseDescription,
                                         seriesAction.resumePositionMs,
+                                        meta.runtimeMinutesForPlayback(
+                                            seriesAction.seasonNumber,
+                                            seriesAction.episodeNumber,
+                                        ),
                                     )
                                 }
 
@@ -823,6 +832,7 @@ fun MetaDetailsScreen(
                                         null,
                                         meta.description,
                                         movieProgress?.lastPositionMs,
+                                        meta.runtimeMinutesForPlayback(null, null),
                                     )
                                 }
                             }
@@ -860,6 +870,7 @@ fun MetaDetailsScreen(
                         video.thumbnail,
                         video.overview,
                         savedProgress?.lastPositionMs,
+                        video.runtime ?: meta.runtimeMinutesForPlayback(season, episode),
                     )
                 }
                 val onEpisodeManualPlayClick: (MetaVideo) -> Unit = { video ->
@@ -894,6 +905,7 @@ fun MetaDetailsScreen(
                         video.thumbnail,
                         video.overview,
                         savedProgress?.lastPositionMs,
+                        video.runtime ?: meta.runtimeMinutesForPlayback(season, episode),
                     )
                 }
                 val listState = rememberLazyListState()
@@ -1879,6 +1891,11 @@ fun MetaDetailsScreen(
                                         selectedEpisode.thumbnail,
                                         selectedEpisode.overview,
                                         savedProgress?.lastPositionMs,
+                                        selectedEpisode.runtime
+                                            ?: meta.runtimeMinutesForPlayback(
+                                                selectedEpisode.season,
+                                                selectedEpisode.episode,
+                                            ),
                                     )
                                 },
                             ),

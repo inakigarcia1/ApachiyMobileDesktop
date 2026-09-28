@@ -44,7 +44,7 @@ data class PlayerSettingsUiState(
     val externalPlayerForwardSubtitles: Boolean = false,
     val externalPlayerSendSkipSegments: Boolean = false,
     val externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId(),
-    val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
+    val preferredAudioLanguage: String = AudioLanguageOption.ORIGINAL,
     val secondaryPreferredAudioLanguage: String? = null,
     val preferredSubtitleLanguage: String = SubtitleLanguageOption.NONE,
     val secondaryPreferredSubtitleLanguage: String? = null,
@@ -113,7 +113,7 @@ object PlayerSettingsRepository {
     private var externalPlayerForwardSubtitles = false
     private var externalPlayerSendSkipSegments = false
     private var externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId()
-    private var preferredAudioLanguage = AudioLanguageOption.DEVICE
+    private var preferredAudioLanguage = AudioLanguageOption.ORIGINAL
     private var secondaryPreferredAudioLanguage: String? = null
     private var preferredSubtitleLanguage = SubtitleLanguageOption.NONE
     private var secondaryPreferredSubtitleLanguage: String? = null
@@ -187,7 +187,7 @@ object PlayerSettingsRepository {
         externalPlayerForwardSubtitles = false
         externalPlayerSendSkipSegments = false
         externalPlayerId = ExternalPlayerPlatform.defaultPlayerId()
-        preferredAudioLanguage = AudioLanguageOption.DEVICE
+        preferredAudioLanguage = AudioLanguageOption.ORIGINAL
         secondaryPreferredAudioLanguage = null
         preferredSubtitleLanguage = SubtitleLanguageOption.NONE
         secondaryPreferredSubtitleLanguage = null
@@ -265,9 +265,7 @@ object PlayerSettingsRepository {
         externalPlayerSendSkipSegments = PlayerSettingsStorage.loadExternalPlayerSendSkipSegments() ?: false
         externalPlayerId = PlayerSettingsStorage.loadExternalPlayerId()
             ?: ExternalPlayerPlatform.defaultPlayerId()
-        preferredAudioLanguage =
-            normalizeLanguageCode(PlayerSettingsStorage.loadPreferredAudioLanguage())
-                ?: AudioLanguageOption.DEVICE
+        preferredAudioLanguage = AudioLanguageOption.ORIGINAL
         secondaryPreferredAudioLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredAudioLanguage())
         preferredSubtitleLanguage =
@@ -496,11 +494,10 @@ object PlayerSettingsRepository {
 
     fun setPreferredAudioLanguage(language: String) {
         ensureLoaded()
-        val normalized = normalizeLanguageCode(language) ?: AudioLanguageOption.DEVICE
-        if (preferredAudioLanguage == normalized) return
-        preferredAudioLanguage = normalized
+        normalizeLanguageCode(language)
+        if (preferredAudioLanguage == AudioLanguageOption.ORIGINAL) return
+        preferredAudioLanguage = AudioLanguageOption.ORIGINAL
         publish()
-        PlayerSettingsStorage.savePreferredAudioLanguage(normalized)
     }
 
     fun setSecondaryPreferredAudioLanguage(language: String?) {

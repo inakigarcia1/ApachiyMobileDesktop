@@ -144,6 +144,17 @@ fun main(args: Array<String>) {
             }
 
             LaunchedEffect(window) {
+                val gc = window.graphicsConfiguration
+                    ?: java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+                        .defaultScreenDevice.defaultConfiguration
+                val bounds = gc.bounds
+                val transform = gc.defaultTransform
+                com.nuvio.app.features.addons.PlaybackCapabilitiesProvider.setMonitorSize(
+                    (bounds.width * transform.scaleX).toInt(),
+                    (bounds.height * transform.scaleY).toInt(),
+                )
+            }
+            LaunchedEffect(window) {
                 applyNativeDesktopWindowChrome(window)
                 installLinuxExtendedMouseButtons()
                 // Windows fullscreen is emulated natively and isn't reflected by

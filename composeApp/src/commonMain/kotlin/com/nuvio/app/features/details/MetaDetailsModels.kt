@@ -3,6 +3,13 @@ package com.nuvio.app.features.details
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.streams.StreamItem
 
+fun MetaDetails.runtimeMinutesForPlayback(seasonNumber: Int?, episodeNumber: Int?): Int? {
+    if (seasonNumber != null && episodeNumber != null) {
+        return videos.firstOrNull { it.season == seasonNumber && it.episode == episodeNumber }?.runtime
+    }
+    return parseRuntimeMinutesFromDisplay(runtime)
+}
+
 data class MetaDetails(
     val id: String,
     val type: String,

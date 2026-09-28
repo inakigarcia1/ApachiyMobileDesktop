@@ -646,6 +646,20 @@ object TmdbMetadataService {
         }
     }
 
+    suspend fun resolveOriginalLanguage(type: String, id: String): String? {
+        TmdbSettingsRepository.ensureLoaded()
+        val settings = TmdbSettingsRepository.snapshot()
+        if (!settings.hasApiKey) return null
+        val mediaType = normalizeMetaType(type)
+        val tmdbId = TmdbService.ensureTmdbId(id, mediaType) ?: return null
+        val numericId = tmdbId.toIntOrNull() ?: return null
+        val details = fetch<TmdbDetailsResponse>(
+            endpoint = "$mediaType/$numericId",
+            query = mapOf("language" to normalizeTmdbLanguage(settings.language)),
+        ) ?: return null
+        return details.originalLanguage?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+    }
+
     suspend fun enrichMeta(
         meta: MetaDetails,
         fallbackItemId: String,

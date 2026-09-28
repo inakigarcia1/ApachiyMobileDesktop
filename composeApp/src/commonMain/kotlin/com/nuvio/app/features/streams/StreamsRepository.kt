@@ -48,7 +48,15 @@ object StreamsRepository {
     ): String =
         "$type::$videoId::$season::$episode::$manualSelection"
 
-    fun load(type: String, videoId: String, parentMetaId: String? = null, season: Int? = null, episode: Int? = null, manualSelection: Boolean = false) {
+    fun load(
+        type: String,
+        videoId: String,
+        parentMetaId: String? = null,
+        season: Int? = null,
+        episode: Int? = null,
+        manualSelection: Boolean = false,
+        runtimeMinutes: Int? = null,
+    ) {
         load(
             type = type,
             videoId = videoId,
@@ -56,11 +64,20 @@ object StreamsRepository {
             season = season,
             episode = episode,
             manualSelection = manualSelection,
+            runtimeMinutes = runtimeMinutes,
             forceRefresh = false,
         )
     }
 
-    fun reload(type: String, videoId: String, parentMetaId: String? = null, season: Int? = null, episode: Int? = null, manualSelection: Boolean = false) {
+    fun reload(
+        type: String,
+        videoId: String,
+        parentMetaId: String? = null,
+        season: Int? = null,
+        episode: Int? = null,
+        manualSelection: Boolean = false,
+        runtimeMinutes: Int? = null,
+    ) {
         load(
             type = type,
             videoId = videoId,
@@ -68,11 +85,21 @@ object StreamsRepository {
             season = season,
             episode = episode,
             manualSelection = manualSelection,
+            runtimeMinutes = runtimeMinutes,
             forceRefresh = true,
         )
     }
 
-    private fun load(type: String, videoId: String, parentMetaId: String?, season: Int?, episode: Int?, manualSelection: Boolean, forceRefresh: Boolean) {
+    private fun load(
+        type: String,
+        videoId: String,
+        parentMetaId: String?,
+        season: Int?,
+        episode: Int?,
+        manualSelection: Boolean,
+        runtimeMinutes: Int?,
+        forceRefresh: Boolean,
+    ) {
         val pluginUiState = if (AppFeaturePolicy.pluginsEnabled) {
             PluginRepository.initialize()
             PluginRepository.uiState.value
@@ -450,6 +477,8 @@ object StreamsRepository {
                         resource = "stream",
                         type = type,
                         id = videoId,
+                        manifestId = addon.manifest.id,
+                        runtimeMinutes = runtimeMinutes,
                     )
                     log.d { "Fetching streams from: $url" }
 

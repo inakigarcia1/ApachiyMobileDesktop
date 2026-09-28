@@ -91,6 +91,24 @@ internal fun isUndesirableAudioTrack(track: AudioTrack): Boolean {
     ).any { marker -> text.contains(marker) }
 }
 
+internal fun isLikelyLocalizedDubAudio(track: AudioTrack): Boolean {
+    val text = listOfNotNull(track.label, track.id).joinToString(" ").lowercase()
+    if (text.isBlank()) return false
+    if (Regex("""\b(dub|dubs|dubbed|mvo|dvo|avo|voice-?over)\b""").containsMatchIn(text)) return true
+    return Regex("""\bvo\b""").containsMatchIn(text)
+}
+
+internal fun originalAudioPresentationScore(track: AudioTrack): Int {
+    val text = (track.label ?: "").lowercase()
+    var score = 0
+    if ("atmos" in text || "truehd" in text) score += 40
+    if ("dts-hd" in text || "dts hd" in text) score += 30
+    if ("flac" in text) score += 15
+    if ("compatibility" in text) score -= 20
+    if (isLikelyLocalizedDubAudio(track)) score -= 200
+    return score
+}
+
 internal fun findPreferredOriginalAudioTrackIndex(
     tracks: List<AudioTrack>,
     contentOriginalLanguage: String?,
@@ -104,18 +122,26 @@ internal fun findPreferredOriginalAudioTrackIndex(
         deviceLanguages = emptyList(),
         contentOriginalLanguage = contentOriginalLanguage,
     )
-    if (originalTargets.isNotEmpty()) {
-        val matched = findPreferredTrackIndex(
-            tracks = eligible,
-            targets = originalTargets,
-            language = ::resolveAudioTrackLanguageTarget,
-        )
-        if (matched >= 0) {
-            val track = eligible[matched]
-            return tracks.indexOfFirst { it.index == track.index }
+    val languagePool = if (originalTargets.isNotEmpty()) {
+        eligible.filter { track ->
+            originalTargets.any { target ->
+                languageMatchesPreference(
+                    trackLanguage = resolveAudioTrackLanguageTarget(track),
+                    targetLanguage = target,
+                )
+            }
         }
+    } else {
+        emptyList()
     }
-    return -1
+    val pool = when {
+        languagePool.isNotEmpty() -> languagePool
+        else -> eligible.filter { !isLikelyLocalizedDubAudio(it) }
+    }
+    val best = pool.maxWithOrNull(
+        compareBy<AudioTrack>({ originalAudioPresentationScore(it) }, { -it.index }),
+    ) ?: return -1
+    return tracks.indexOfFirst { it.index == best.index }
 }
 
 internal fun resolveAudioTrackLanguageTarget(track: AudioTrack?): String? {

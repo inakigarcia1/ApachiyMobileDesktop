@@ -196,6 +196,8 @@ internal fun StreamDestination(
             torrentTrackers = stream.p2pTrackers,
             initialPositionMs = resolvedResumePositionMs ?: 0L,
             initialProgressFraction = resolvedResumeProgressFraction,
+            runtimeMinutes = launch.runtimeMinutes,
+            contentLanguage = launch.contentLanguage,
         )
 
         val launchId = PlayerLaunchStore.put(playerLaunch)
@@ -316,6 +318,7 @@ internal fun StreamDestination(
                 videoSize = cached.videoSize,
                 initialPositionMs = launch.resumePositionMs ?: 0L,
                 initialProgressFraction = launch.resumeProgressFraction,
+                runtimeMinutes = launch.runtimeMinutes,
                 contentLanguage = cached.contentLanguage,
             )
             if (externalPlayerSupported && playerSettings.externalPlayerEnabled) {
@@ -434,6 +437,7 @@ internal fun StreamDestination(
                 videoSize = stream.behaviorHints.videoSize,
                 bingeGroup = stream.behaviorHints.bingeGroup,
                 streamType = stream.streamType,
+                contentLanguage = launch.contentLanguage,
             )
         }
         val playerLaunch = PlayerLaunch(
@@ -466,6 +470,8 @@ internal fun StreamDestination(
             videoSize = stream.behaviorHints.videoSize,
             initialPositionMs = launch.resumePositionMs ?: 0L,
             initialProgressFraction = launch.resumeProgressFraction,
+            runtimeMinutes = launch.runtimeMinutes,
+            contentLanguage = launch.contentLanguage,
         )
         if (externalPlayerSupported && playerSettings.externalPlayerEnabled) {
             openExternalPlayback(playerLaunch)
@@ -592,6 +598,7 @@ internal fun StreamDestination(
                 videoSize = stream.behaviorHints.videoSize,
                 bingeGroup = stream.behaviorHints.bingeGroup,
                 streamType = stream.streamType,
+                contentLanguage = launch.contentLanguage,
             )
         }
         val playerLaunch = PlayerLaunch(
@@ -624,6 +631,8 @@ internal fun StreamDestination(
             videoSize = stream.behaviorHints.videoSize,
             initialPositionMs = resolvedResumePositionMs ?: 0L,
             initialProgressFraction = resolvedResumeProgressFraction,
+            runtimeMinutes = launch.runtimeMinutes,
+            contentLanguage = launch.contentLanguage,
         )
 
         if (!forceInternal && externalPlayerSupported && (forceExternal || playerSettings.externalPlayerEnabled)) {
@@ -665,6 +674,7 @@ internal fun StreamDestination(
             resumeProgressFraction = launch.resumeProgressFraction,
             manualSelection = launch.manualSelection,
             startFromBeginning = launch.startFromBeginning,
+            runtimeMinutes = launch.runtimeMinutes,
             onStreamSelected = { stream, resolvedResumePositionMs, resolvedResumeProgressFraction ->
                 openSelectedStream(
                     stream = stream,

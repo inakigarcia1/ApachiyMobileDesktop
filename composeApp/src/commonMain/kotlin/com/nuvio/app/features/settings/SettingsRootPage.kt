@@ -32,7 +32,6 @@ import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.core.build.AppVersionPolicy
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_about_based_on_version_format
-import nuvio.composeapp.generated.resources.compose_about_made_with
 import nuvio.composeapp.generated.resources.compose_about_version_format
 import nuvio.composeapp.generated.resources.compose_settings_page_account
 import nuvio.composeapp.generated.resources.compose_settings_page_advanced
@@ -93,10 +92,12 @@ internal fun LazyListScope.settingsRootContent(
     showAccountSection: Boolean = true,
     showGeneralSection: Boolean = true,
     showAboutSection: Boolean = true,
-    showAdvancedSection: Boolean = true,
+    showAdvancedSection: Boolean = ApachiyProductSettings.operatorSettingsVisible,
     showSupportersContributorsPage: Boolean = true,
-    showContentDiscoveryEntry: Boolean = !isDesktop || ApachiyProductSettings.operatorSettingsVisible,
-    showIntegrationsEntry: Boolean = !isDesktop || ApachiyProductSettings.operatorSettingsVisible,
+    showTrackingEntry: Boolean = ApachiyProductSettings.operatorSettingsVisible,
+    showLicensesAttributionsEntry: Boolean = ApachiyProductSettings.operatorSettingsVisible,
+    showContentDiscoveryEntry: Boolean = ApachiyProductSettings.operatorSettingsVisible,
+    showIntegrationsEntry: Boolean = ApachiyProductSettings.operatorSettingsVisible,
 ) {
     if (showAccountSection) {
         item {
@@ -122,14 +123,16 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = onAccountClick,
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_tracking),
-                        description = stringResource(Res.string.compose_settings_root_tracking_description),
-                        icon = Icons.Default.Sync,
-                        isTablet = isTablet,
-                        onClick = onTrackingClick,
-                    )
+                    if (showTrackingEntry) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_tracking),
+                            description = stringResource(Res.string.compose_settings_root_tracking_description),
+                            icon = Icons.Default.Sync,
+                            isTablet = isTablet,
+                            onClick = onTrackingClick,
+                        )
+                    }
                 }
             }
         }
@@ -225,14 +228,16 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_licenses_attributions),
-                        description = stringResource(Res.string.about_licenses_attributions_subtitle),
-                        icon = Icons.Rounded.Info,
-                        isTablet = isTablet,
-                        onClick = onLicensesAttributionsClick,
-                    )
+                    if (showLicensesAttributionsEntry) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_licenses_attributions),
+                            description = stringResource(Res.string.about_licenses_attributions_subtitle),
+                            icon = Icons.Rounded.Info,
+                            isTablet = isTablet,
+                            onClick = onLicensesAttributionsClick,
+                        )
+                    }
                     if (onCheckForUpdatesClick != null) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(
@@ -293,19 +298,10 @@ internal fun LazyListScope.settingsRootContent(
                     )
                 }
                 showAboutSection -> {
-                    MemberBrandWordmark(
-                        height = if (isTablet) 30.dp else 26.dp,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                    androidx.compose.foundation.layout.Spacer(
-                        modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),
-                    )
-                    Text(
-                        text = stringResource(Res.string.compose_about_made_with),
-                        modifier = Modifier.fillMaxWidth(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                    AppBrandWordmark(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .height(if (isTablet) 48.dp else 42.dp),
                     )
                     androidx.compose.foundation.layout.Spacer(
                         modifier = Modifier.height(if (isTablet) 10.dp else 8.dp),

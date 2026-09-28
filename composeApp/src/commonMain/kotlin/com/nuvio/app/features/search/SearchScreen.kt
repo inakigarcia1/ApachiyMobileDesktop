@@ -65,7 +65,6 @@ import com.nuvio.app.core.ui.posterGridColumnCountForCatalogWidth
 import com.nuvio.app.features.home.components.posterGridColumnCountForWidth
 import com.nuvio.app.isDesktop
 import com.nuvio.app.features.watched.WatchedRepository
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
@@ -180,23 +179,9 @@ fun SearchScreen(
 
     LaunchedEffect(query, addonRefreshKey, homeCatalogSettingsUiState.hideUnreleasedContent) {
         val normalizedQuery = query.trim()
-        if (isDesktop) {
-            if (normalizedQuery.isBlank()) {
-                lastRequestedQuery = null
-                SearchRepository.clear()
-            }
-            return@LaunchedEffect
-        }
         if (normalizedQuery.isBlank()) {
             lastRequestedQuery = null
             SearchRepository.clear()
-        } else {
-            delay(350)
-            lastRequestedQuery = normalizedQuery
-            SearchRepository.search(
-                query = normalizedQuery,
-                addons = addonsUiState.addons,
-            )
         }
     }
 
@@ -308,42 +293,18 @@ fun SearchScreen(
                             onValueChange = { query = it },
                             placeholder = stringResource(Res.string.compose_search_placeholder),
                             modifier = Modifier.focusRequester(focusRequester),
-                            keyboardOptions = if (isDesktop) {
-                                KeyboardOptions(imeAction = ImeAction.Search)
-                            } else {
-                                KeyboardOptions.Default
-                            },
-                            keyboardActions = if (isDesktop) {
-                                KeyboardActions(onSearch = { submitSearch() })
-                            } else {
-                                KeyboardActions.Default
-                            },
-                            trailingContent = when {
-                                isDesktop -> {
-                                    {
-                                        Row {
-                                            IconButton(onClick = { submitSearch() }) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Search,
-                                                    contentDescription = stringResource(Res.string.compose_nav_search),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                            if (query.isNotBlank()) {
-                                                IconButton(onClick = { query = "" }) {
-                                                    Icon(
-                                                        imageVector = Icons.Rounded.Close,
-                                                        contentDescription = stringResource(Res.string.compose_search_clear),
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
-                                                }
-                                            }
-                                        }
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
+                            trailingContent = {
+                                Row {
+                                    IconButton(onClick = { submitSearch() }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Search,
+                                            contentDescription = stringResource(Res.string.compose_nav_search),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
-                                }
-
-                                query.isNotBlank() -> {
-                                    {
+                                    if (query.isNotBlank()) {
                                         IconButton(onClick = { query = "" }) {
                                             Icon(
                                                 imageVector = Icons.Rounded.Close,
@@ -353,8 +314,6 @@ fun SearchScreen(
                                         }
                                     }
                                 }
-
-                                else -> null
                             },
                         )
                     }
@@ -406,15 +365,7 @@ fun SearchScreen(
                     normalizedQuery.isNotBlank() &&
                     lastRequestedQuery != normalizedQuery
                 when {
-                    isDesktopPendingSearch -> Unit
-
-                    isWaitingForSearch -> {
-                        items(2) {
-                            HomeSkeletonRow(
-                                modifier = Modifier.padding(horizontal = homeSectionPadding),
-                            )
-                        }
-                    }
+                    isDesktopPendingSearch || isWaitingForSearch -> Unit
 
                     uiState.isLoading && uiState.sections.isEmpty() -> {
                         items(2) {

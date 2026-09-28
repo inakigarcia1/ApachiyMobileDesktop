@@ -107,6 +107,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
             videoId = nextVideo.id,
             season = nextVideo.season,
             episode = nextVideo.episode,
+            runtimeMinutes = nextVideo.runtime,
         )
 
         val installedAddonNames = AddonRepository.uiState.value.addons

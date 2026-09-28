@@ -1,5 +1,35 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.tmdb.TmdbMetadataService
+
+internal fun PlayerScreenRuntime.resolvePlaybackContentOriginalLanguage(): String? {
+    playbackContentOriginalLanguage?.let { return it }
+    val metaDetails = metaUiState.meta?.takeIf { meta ->
+        meta.type == parentMetaType && meta.id == parentMetaId
+    } ?: MetaDetailsRepository.peek(parentMetaType, parentMetaId)
+    return resolveContentLanguage(
+        language = metaDetails?.language,
+        country = metaDetails?.country,
+    ) ?: args.contentLanguage
+}
+
+internal suspend fun PlayerScreenRuntime.ensurePlaybackContentOriginalLanguageResolved(): String? {
+    resolvePlaybackContentOriginalLanguage()?.let { return it }
+    val meta = MetaDetailsRepository.fetch(parentMetaType, parentMetaId)
+    val fromMeta = resolveContentLanguage(meta?.language, meta?.country)
+    if (fromMeta != null) {
+        playbackContentOriginalLanguage = fromMeta
+        return fromMeta
+    }
+    val fromTmdb = TmdbMetadataService.resolveOriginalLanguage(parentMetaType, parentMetaId)
+    if (fromTmdb != null) {
+        playbackContentOriginalLanguage = fromTmdb
+        return fromTmdb
+    }
+    return null
+}
+
 internal val PlayerScreenRuntime.subtitleStyle: SubtitleStyleState
     get() = playerSettingsUiState.subtitleStyle
 
@@ -188,29 +218,29 @@ internal fun PlayerScreenRuntime.refreshTracks() {
 
     restorePersistedTrackPreferenceIfNeeded()
 
-    val contentOriginalLanguage = resolveContentLanguage(
-        language = metaUiState.meta?.language,
-        country = metaUiState.meta?.country,
-    ) ?: args.contentLanguage
+    val contentOriginalLanguage = resolvePlaybackContentOriginalLanguage()
     val preferredAudioTargets = resolvePreferredAudioLanguageTargets(
-        preferredAudioLanguage = playerSettingsUiState.preferredAudioLanguage,
-        secondaryPreferredAudioLanguage = playerSettingsUiState.secondaryPreferredAudioLanguage,
-        deviceLanguages = DeviceLanguagePreferences.preferredLanguageCodes(),
+        preferredAudioLanguage = AudioLanguageOption.ORIGINAL,
+        secondaryPreferredAudioLanguage = null,
+        deviceLanguages = emptyList(),
         contentOriginalLanguage = contentOriginalLanguage,
     )
 
     if (!preferredAudioSelectionApplied) {
-        if (audioTracks.isNotEmpty()) {
-            val preferredAudioIndex = findPreferredOriginalAudioTrackIndex(
-                tracks = audioTracks,
-                contentOriginalLanguage = contentOriginalLanguage,
-            )
-            if (preferredAudioIndex >= 0 && preferredAudioIndex != selectedAudioIndex) {
-                playerController?.selectAudioTrack(preferredAudioIndex)
-                selectedAudioIndex = preferredAudioIndex
-            }
+        if (audioTracks.isEmpty()) {
+            return
         }
-        preferredAudioSelectionApplied = true
+        val preferredAudioIndex = findPreferredOriginalAudioTrackIndex(
+            tracks = audioTracks,
+            contentOriginalLanguage = contentOriginalLanguage,
+        )
+        if (preferredAudioIndex >= 0 && preferredAudioIndex != selectedAudioIndex) {
+            playerController?.selectAudioTrack(preferredAudioIndex)
+            selectedAudioIndex = preferredAudioIndex
+        }
+        if (preferredAudioIndex >= 0) {
+            preferredAudioSelectionApplied = true
+        }
     }
 
     tryAutoSelectPreferredSubtitleFromAvailableTracks(preferredAudioTargets)

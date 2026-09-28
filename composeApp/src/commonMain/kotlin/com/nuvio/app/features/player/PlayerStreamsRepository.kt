@@ -68,6 +68,7 @@ object PlayerStreamsRepository {
         season: Int? = null,
         episode: Int? = null,
         forceRefresh: Boolean = false,
+        runtimeMinutes: Int? = null,
     ) {
         fetchStreams(
             panelName = "sources",
@@ -75,6 +76,7 @@ object PlayerStreamsRepository {
             videoId = videoId,
             season = season,
             episode = episode,
+            runtimeMinutes = runtimeMinutes,
             forceRefresh = forceRefresh,
             stateFlow = _sourceState,
             requestKeyHolder = { sourceRequestKey },
@@ -90,6 +92,7 @@ object PlayerStreamsRepository {
         season: Int? = null,
         episode: Int? = null,
         forceRefresh: Boolean = false,
+        runtimeMinutes: Int? = null,
     ) {
         fetchStreams(
             panelName = "episodeStreams",
@@ -97,6 +100,7 @@ object PlayerStreamsRepository {
             videoId = videoId,
             season = season,
             episode = episode,
+            runtimeMinutes = runtimeMinutes,
             forceRefresh = forceRefresh,
             stateFlow = _episodeStreamsState,
             requestKeyHolder = { episodeStreamsRequestKey },
@@ -133,6 +137,7 @@ object PlayerStreamsRepository {
         videoId: String,
         season: Int?,
         episode: Int?,
+        runtimeMinutes: Int?,
         forceRefresh: Boolean,
         stateFlow: MutableStateFlow<StreamsUiState>,
         requestKeyHolder: () -> String?,
@@ -357,6 +362,8 @@ object PlayerStreamsRepository {
                         resource = "stream",
                         type = type,
                         id = videoId,
+                        manifestId = addon.manifest.id,
+                        runtimeMinutes = runtimeMinutes,
                     )
 
                     val displayName = addon.addonName

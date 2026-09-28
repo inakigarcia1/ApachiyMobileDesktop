@@ -319,8 +319,6 @@ fun SettingsScreen(
                 holdToSpeedEnabled = playerSettingsUiState.holdToSpeedEnabled,
                 holdToSpeedValue = playerSettingsUiState.holdToSpeedValue,
                 touchGesturesEnabled = playerSettingsUiState.touchGesturesEnabled,
-                preferredAudioLanguage = playerSettingsUiState.preferredAudioLanguage,
-                secondaryPreferredAudioLanguage = playerSettingsUiState.secondaryPreferredAudioLanguage,
                 preferredSubtitleLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                 secondaryPreferredSubtitleLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
                 streamReuseLastLinkEnabled = playerSettingsUiState.streamReuseLastLinkEnabled,
@@ -381,8 +379,6 @@ fun SettingsScreen(
                 holdToSpeedEnabled = playerSettingsUiState.holdToSpeedEnabled,
                 holdToSpeedValue = playerSettingsUiState.holdToSpeedValue,
                 touchGesturesEnabled = playerSettingsUiState.touchGesturesEnabled,
-                preferredAudioLanguage = playerSettingsUiState.preferredAudioLanguage,
-                secondaryPreferredAudioLanguage = playerSettingsUiState.secondaryPreferredAudioLanguage,
                 preferredSubtitleLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                 secondaryPreferredSubtitleLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
                 streamReuseLastLinkEnabled = playerSettingsUiState.streamReuseLastLinkEnabled,
@@ -453,8 +449,6 @@ private fun MobileSettingsScreen(
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
     touchGesturesEnabled: Boolean,
-    preferredAudioLanguage: String,
-    secondaryPreferredAudioLanguage: String?,
     preferredSubtitleLanguage: String,
     secondaryPreferredSubtitleLanguage: String?,
     streamReuseLastLinkEnabled: Boolean,
@@ -514,6 +508,7 @@ private fun MobileSettingsScreen(
 ) {
     val saveableStateHolder = rememberSaveableStateHolder()
     saveableStateHolder.SaveableStateProvider(page.name) {
+        val operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible
         var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
         var rootSearchVisible by rememberSaveable { mutableStateOf(false) }
         var rootSearchRevealAnimating by rememberSaveable { mutableStateOf(false) }
@@ -605,16 +600,18 @@ private fun MobileSettingsScreen(
 
             when (page) {
                 SettingsPage.Root -> {
-                    settingsSearchRootContent(
-                        query = settingsSearchQuery,
-                        entries = searchEntries,
-                        isTablet = false,
-                        showSearchField = rootSearchVisible,
-                        animateSearchField = rootSearchRevealAnimating,
-                        onQueryChange = { settingsSearchQuery = it },
-                        onTargetClick = { openSearchTarget(it) },
-                    )
-                    if (settingsSearchQuery.isBlank()) {
+                    if (operatorSettingsVisible) {
+                        settingsSearchRootContent(
+                            query = settingsSearchQuery,
+                            entries = searchEntries,
+                            isTablet = false,
+                            showSearchField = rootSearchVisible,
+                            animateSearchField = rootSearchRevealAnimating,
+                            onQueryChange = { settingsSearchQuery = it },
+                            onTargetClick = { openSearchTarget(it) },
+                        )
+                    }
+                    if (!operatorSettingsVisible || settingsSearchQuery.isBlank()) {
                         settingsRootContent(
                             isTablet = false,
                             onPlaybackClick = { onPageChange(SettingsPage.Playback) },
@@ -654,8 +651,6 @@ private fun MobileSettingsScreen(
                     holdToSpeedEnabled = holdToSpeedEnabled,
                     holdToSpeedValue = holdToSpeedValue,
                     touchGesturesEnabled = touchGesturesEnabled,
-                    preferredAudioLanguage = preferredAudioLanguage,
-                    secondaryPreferredAudioLanguage = secondaryPreferredAudioLanguage,
                     preferredSubtitleLanguage = preferredSubtitleLanguage,
                     secondaryPreferredSubtitleLanguage = secondaryPreferredSubtitleLanguage,
                     streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
@@ -827,8 +822,6 @@ private fun TabletSettingsScreen(
     holdToSpeedEnabled: Boolean,
     holdToSpeedValue: Float,
     touchGesturesEnabled: Boolean,
-    preferredAudioLanguage: String,
-    secondaryPreferredAudioLanguage: String?,
     preferredSubtitleLanguage: String,
     secondaryPreferredSubtitleLanguage: String?,
     streamReuseLastLinkEnabled: Boolean,
@@ -943,6 +936,7 @@ private fun TabletSettingsScreen(
         }
 
         saveableStateHolder.SaveableStateProvider(page.name) {
+            val operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible
             var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
             var rootSearchVisible by rememberSaveable { mutableStateOf(false) }
             var rootSearchRevealAnimating by rememberSaveable { mutableStateOf(false) }
@@ -1037,16 +1031,18 @@ private fun TabletSettingsScreen(
                     }
                     when (page) {
                         SettingsPage.Root -> {
-                            settingsSearchRootContent(
-                                query = settingsSearchQuery,
-                                entries = searchEntries,
-                                isTablet = true,
-                                showSearchField = rootSearchVisible,
-                                animateSearchField = rootSearchRevealAnimating,
-                                onQueryChange = { settingsSearchQuery = it },
-                                onTargetClick = { openSearchTarget(it) },
-                            )
-                            if (settingsSearchQuery.isBlank()) {
+                            if (operatorSettingsVisible) {
+                                settingsSearchRootContent(
+                                    query = settingsSearchQuery,
+                                    entries = searchEntries,
+                                    isTablet = true,
+                                    showSearchField = rootSearchVisible,
+                                    animateSearchField = rootSearchRevealAnimating,
+                                    onQueryChange = { settingsSearchQuery = it },
+                                    onTargetClick = { openSearchTarget(it) },
+                                )
+                            }
+                            if (!operatorSettingsVisible || settingsSearchQuery.isBlank()) {
                                 settingsRootContent(
                                     isTablet = true,
                                     onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
@@ -1090,8 +1086,6 @@ private fun TabletSettingsScreen(
                             holdToSpeedEnabled = holdToSpeedEnabled,
                             holdToSpeedValue = holdToSpeedValue,
                             touchGesturesEnabled = touchGesturesEnabled,
-                            preferredAudioLanguage = preferredAudioLanguage,
-                            secondaryPreferredAudioLanguage = secondaryPreferredAudioLanguage,
                             preferredSubtitleLanguage = preferredSubtitleLanguage,
                             secondaryPreferredSubtitleLanguage = secondaryPreferredSubtitleLanguage,
                             streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
