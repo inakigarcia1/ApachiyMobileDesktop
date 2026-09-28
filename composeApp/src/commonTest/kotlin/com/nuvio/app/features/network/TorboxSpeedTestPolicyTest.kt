@@ -27,6 +27,12 @@ class TorboxSpeedTestPolicyTest {
     }
 
     @Test
+    fun formatTorboxMbps_one_decimal_below_100() {
+        assertEquals("50.5", formatTorboxMbps(50.48))
+        assertEquals("100", formatTorboxMbps(100.4))
+    }
+
+    @Test
     fun shouldMeasure_on_network_change() {
         val now = 1_000_000L
         val sample = TorboxSpeedSample(40.0, now - 60_000)

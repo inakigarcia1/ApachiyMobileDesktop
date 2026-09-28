@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import com.nuvio.app.features.network.PlaybackActiveGuard
 import com.nuvio.app.features.network.TorboxSpeedTestCoordinator
+import com.nuvio.app.features.network.formatTorboxMbps
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.settings_playback_torbox_measure_now
 import nuvio.composeapp.generated.resources.settings_playback_torbox_speed_last
@@ -33,7 +34,7 @@ internal fun TorboxSpeedSettingsGroup(
                 .format(Date(sample.measuredAtEpochMs))
             stringResource(
                 Res.string.settings_playback_torbox_speed_last,
-                sample.speedMbps,
+                formatTorboxMbps(sample.speedMbps),
                 whenText,
             )
         }

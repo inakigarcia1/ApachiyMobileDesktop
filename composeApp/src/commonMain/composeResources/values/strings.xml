@@ -1160,7 +1160,7 @@
     <string name="settings_playback_section_stream_auto_play">STREAM AUTO-PLAY</string>
     <string name="settings_playback_torbox_speed_title">Bandwidth (TorBox)</string>
     <string name="settings_playback_torbox_speed_none">No saved measurement</string>
-    <string name="settings_playback_torbox_speed_last">Last: %1$.1f Mbps · %2$s</string>
+    <string name="settings_playback_torbox_speed_last">Last: %1$s Mbps · %2$s</string>
     <string name="settings_playback_torbox_measure_now">Measure now</string>
     <string name="settings_playback_section_stream_selection">STREAM SELECTION</string>
     <string name="settings_playback_section_subtitle_audio">SUBTITLE AND AUDIO</string>

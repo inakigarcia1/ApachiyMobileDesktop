@@ -8,6 +8,9 @@ data class TorboxSpeedSample(
     fun isValid(): Boolean = speedMbps > 0.0 && measuredAtEpochMs > 0L
 }
 
+internal fun formatTorboxMbps(mbps: Double): String =
+    if (mbps >= 100) "%.0f".format(mbps) else "%.1f".format(mbps)
+
 object TorboxSpeedTestPolicy {
     const val MEASURE_DURATION_MS: Long = 6_000L
     const val STALE_AFTER_MS: Long = 6 * 60 * 60 * 1000L

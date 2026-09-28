@@ -489,7 +489,6 @@ internal fun MainAppContent(
     LaunchedEffect(ownsAppRuntime) {
         if (!ownsAppRuntime) return@LaunchedEffect
         com.nuvio.app.features.network.TorboxSpeedTestHarness.initializePlatform()
-        com.nuvio.app.features.network.TorboxSpeedTestCoordinator.scheduleBackgroundCheck()
     }
 
     LaunchedEffect(networkStatusUiState.condition) {
@@ -616,6 +615,7 @@ internal fun MainAppContent(
             AppForegroundMonitor.events().collect { visibility ->
                 when (visibility) {
                     AppVisibility.Foreground -> {
+                        com.nuvio.app.features.network.TorboxSpeedTestCoordinator.scheduleBackgroundCheck()
                         NetworkStatusRepository.requestForegroundRefresh()
                         DeviceSessionRegistration.registerIfAuthenticated()
                         MemberAccessRepository.refreshIfStale()
