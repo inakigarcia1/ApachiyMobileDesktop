@@ -65,6 +65,8 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.CaptionStyleCompat
 import com.nuvio.app.R
+import com.nuvio.app.core.diagnostics.PlaybackFailureDetails
+import com.nuvio.app.core.diagnostics.PlaybackFailureNotes
 import com.nuvio.app.features.autosync.AutoSyncCandidateScope
 import com.nuvio.app.features.autosync.AutoSyncExtractorsFactory
 import com.nuvio.app.features.autosync.AutoSyncPlayerCoordinator
@@ -572,7 +574,34 @@ private fun ExoPlayerSurface(
                 latestOnError.value(null)
                 return
             }
-            latestOnError.value(error.localizedMessage ?: runBlocking { getString(Res.string.player_unable_to_play_stream) })
+            val message = error.localizedMessage
+                ?: runBlocking { getString(Res.string.player_unable_to_play_stream) }
+            val videoFormat = exoPlayer.videoFormat
+            val causeChain = generateSequence(error.cause) { it.cause }
+                .take(4)
+                .joinToString(" -> ") { cause -> "${cause.javaClass.simpleName}: ${cause.message.orEmpty()}" }
+                .ifBlank { null }
+            if (error.isCompatibilityFailure()) {
+                PlaybackCompatibilitySignals.markCompatibilityFailure()
+                com.nuvio.app.features.addons.PlaybackCapabilitiesProvider.recordDecoderFailure(
+                    mime = videoFormat?.sampleMimeType,
+                    codecs = videoFormat?.codecs,
+                    height = videoFormat?.height ?: 0,
+                )
+            }
+            PlaybackFailureNotes.note(
+                PlaybackFailureDetails(
+                    message = message,
+                    engine = "android-exoplayer",
+                    errorCode = error.errorCodeName,
+                    exceptionClass = error.javaClass.simpleName,
+                    causeClass = error.cause?.javaClass?.simpleName,
+                    causeMessage = causeChain,
+                    videoCodec = videoFormat?.codecs ?: videoFormat?.sampleMimeType,
+                    mimeType = videoFormat?.sampleMimeType,
+                ),
+            )
+            latestOnError.value(message)
         }
 
         val listener = object : Player.Listener {
@@ -1323,7 +1352,17 @@ private fun LibmpvPlayerSurface(
                     initialize(viewContext.filesDir.path, viewContext.cacheDir.path)
                 }.onFailure { error ->
                     Log.e(TAG, "Failed to initialize libmpv", error)
-                    latestOnError.value(error.localizedMessage ?: "libmpv unavailable")
+                    val message = error.localizedMessage ?: "libmpv unavailable"
+                    PlaybackFailureNotes.note(
+                        PlaybackFailureDetails(
+                            message = message,
+                            engine = "android-libmpv",
+                            exceptionClass = error.javaClass.simpleName,
+                            causeClass = error.cause?.javaClass?.simpleName,
+                            causeMessage = error.message,
+                        ),
+                    )
+                    latestOnError.value(message)
                 }
                 playerViewRef = this
             }
@@ -1950,6 +1989,12 @@ private fun PlaybackException.isDecoderFailure(): Boolean =
         PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
+    )
+
+private fun PlaybackException.isCompatibilityFailure(): Boolean =
+    isDecoderFailure() || errorCode in setOf(
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
     )
 
 private fun PlayerResizeMode.toExoResizeMode(): Int =

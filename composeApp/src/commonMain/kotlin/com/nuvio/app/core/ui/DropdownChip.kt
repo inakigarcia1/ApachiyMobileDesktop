@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -181,30 +183,44 @@ private fun NuvioDropdownOptionsSheet(
                 color = tokens.colors.textPrimary,
             )
             NuvioBottomSheetDivider()
-            LazyColumn(
+            val listState = rememberLazyListState()
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = tokens.breakpoints.largePhone),
             ) {
-                itemsIndexed(options) { index, option ->
-                    NuvioBottomSheetActionRow(
-                        title = option.label,
-                        onClick = { onSelected(option) },
-                        trailingContent = {
-                            if (option.key == selectedKey) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = tokens.colors.accent,
-                                    modifier = Modifier.size(tokens.icons.md),
-                                )
-                            }
-                        },
-                    )
-                    if (index < options.lastIndex) {
-                        NuvioBottomSheetDivider()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 10.dp),
+                ) {
+                    itemsIndexed(options) { index, option ->
+                        NuvioBottomSheetActionRow(
+                            title = option.label,
+                            onClick = { onSelected(option) },
+                            trailingContent = {
+                                if (option.key == selectedKey) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = tokens.colors.accent,
+                                        modifier = Modifier.size(tokens.icons.md),
+                                    )
+                                }
+                            },
+                        )
+                        if (index < options.lastIndex) {
+                            NuvioBottomSheetDivider()
+                        }
                     }
                 }
+                NuvioLazyListVerticalScrollIndicator(
+                    state = listState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(),
+                )
             }
         }
     }

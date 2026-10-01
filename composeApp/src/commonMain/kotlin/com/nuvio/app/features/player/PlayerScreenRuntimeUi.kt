@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.diagnostics.PlaybackFailureNotes
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.PresenceSnapshot
@@ -517,7 +518,14 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                     }
                 },
                 onError = { message ->
-                    if (message != null && tryRefreshCredentialedSourceAfterError(message)) {
+                    if (message == null) {
+                        PlaybackFailureNotes.clear()
+                    } else if (
+                        PlaybackCompatibilitySignals.consumeCompatibilityFailure() &&
+                        tryNextCompatibleSource(message)
+                    ) {
+                        return@PlatformPlayerSurface
+                    } else if (tryRefreshCredentialedSourceAfterError(message)) {
                         return@PlatformPlayerSurface
                     }
                     errorMessage = message
@@ -1581,6 +1589,9 @@ private fun BoxScope.RenderPlaybackOverlays(
     suppressOpeningOverlay: Boolean,
 ) {
     runtime.run {
+        LaunchedEffect(errorMessage) {
+            onVisiblePlaybackFailure(errorMessage)
+        }
         PlayerPlaybackOverlays(
             playerControlsLocked = playerControlsLocked,
             lockedOverlayVisible = lockedOverlayVisible,

@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.diagnostics.PlaybackFailureDetails
+import com.nuvio.app.core.diagnostics.PlaybackFailureNotes
 import com.nuvio.app.core.ui.LocalNuvioPlatformDensity
 import com.nuvio.app.core.network.ApachiyAddonAuth
 import com.nuvio.app.core.network.ApachiyConfig
@@ -216,7 +218,10 @@ private fun NativePlayerSurface(
             initialPositionMs = initialPositionMs,
             decoderPriority = decoderPriority,
             nvidiaRtxSuperResolutionEnabled = nvidiaRtxSuperResolutionEnabled,
-                onError = { message -> latestOnError.value(message) },
+                onError = { message ->
+                    noteDesktopPlaybackFailure(message)
+                    latestOnError.value(message)
+                },
         )
         initialPositionRequestKey?.let { key ->
             latestOnInitialPositionHandled.value(key, initialPositionMs > 0L)
@@ -275,6 +280,7 @@ private fun NativePlayerSurface(
                 (attachedAt?.elapsedNow() ?: Duration.ZERO) >= PLAYBACK_STALL_TIMEOUT
             if (stalled) {
                 stallReported = true
+                noteDesktopPlaybackFailure(stallErrorMessage)
                 latestOnError.value(stallErrorMessage)
             }
             val shouldReveal = nativeAttached && !snapshot.isLoading && snapshot.durationMs > 0L
@@ -361,6 +367,36 @@ private class DesktopStubPlayerController : PlayerEngineController {
     override fun setSubtitleUri(url: String) = Unit
     override fun clearExternalSubtitle() = Unit
     override fun clearExternalSubtitleAndSelect(trackIndex: Int) = Unit
+}
+
+private fun noteDesktopPlaybackFailure(message: String?) {
+    if (message.isNullOrBlank()) {
+        PlaybackFailureNotes.clear()
+        return
+    }
+    if (playbackMessageLooksLikeCompatibilityFailure(message)) {
+        PlaybackCompatibilitySignals.markCompatibilityFailure()
+        val lowered = message.lowercase()
+        val mime = when {
+            "hevc" in lowered || "h265" in lowered || "h.265" in lowered -> "video/hevc"
+            "av1" in lowered -> "video/av01"
+            "vp9" in lowered -> "video/x-vnd.on2.vp9"
+            "h264" in lowered || "avc" in lowered -> "video/avc"
+            else -> null
+        }
+        val codecs = if (mime == "video/hevc" && ("main10" in lowered || "10bit" in lowered || "10-bit" in lowered)) {
+            "hvc1.2.4.L150.90"
+        } else {
+            null
+        }
+        com.nuvio.app.features.addons.PlaybackCapabilitiesProvider.recordDecoderFailure(mime, codecs, 0)
+    }
+    PlaybackFailureNotes.note(
+        PlaybackFailureDetails(
+            message = message,
+            engine = "desktop-libmpv",
+        ),
+    )
 }
 
 private fun desktopNativePlaybackUrl(sourceUrl: String): String =

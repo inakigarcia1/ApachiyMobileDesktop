@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -45,9 +46,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.isDesktop
 import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
-import com.nuvio.app.core.auth.AuthRepository
-import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.ui.NuvioDropdownChip
+import com.nuvio.app.core.ui.NuvioDropdownOption
 import com.nuvio.app.core.ui.NuvioInputField
 import com.nuvio.app.core.ui.NuvioPrimaryButton
 import com.nuvio.app.core.ui.NuvioScreen
@@ -87,7 +89,9 @@ fun ProfileEditScreen(
     var avatarUrl by rememberSaveable { mutableStateOf(currentProfile?.avatarUrl.orEmpty()) }
     var selectedBackgroundId by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundId) }
     var selectedBackgroundUrl by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundUrl) }
+    val primaryAddonsLockedOn = !isDesktop
     var usesPrimaryAddons by rememberSaveable { mutableStateOf(currentProfile?.usesPrimaryAddons ?: false) }
+    val effectiveUsesPrimaryAddons = if (primaryAddonsLockedOn) true else usesPrimaryAddons
     var isSaving by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPinSetup by remember { mutableStateOf(false) }
@@ -121,8 +125,28 @@ fun ProfileEditScreen(
     val previewAccent = remember(visibleAvatarItem, fallbackColorHex) {
         parseHexColor(visibleAvatarItem?.bgColor ?: fallbackColorHex)
     }
+    val compactAvatarPicker = !isDesktop
+    val avatarCategories = remember(avatars) { avatars.map { it.category }.distinct() }
+    var selectedAvatarCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(avatars, selectedAvatarId, avatarCategories) {
+        if (avatars.isEmpty()) return@LaunchedEffect
+        val fromSelection = selectedAvatarId?.let { id -> avatars.find { it.id == id }?.category }
+        when {
+            fromSelection != null -> selectedAvatarCategory = fromSelection
+            selectedAvatarCategory == null || selectedAvatarCategory !in avatarCategories ->
+                selectedAvatarCategory = avatarCategories.firstOrNull()
+        }
+    }
+    val avatarsInSelectedCategory = remember(avatars, selectedAvatarCategory, compactAvatarPicker) {
+        if (!compactAvatarPicker || selectedAvatarCategory == null) {
+            avatars
+        } else {
+            avatars.filter { it.category == selectedAvatarCategory }
+        }
+    }
+    val listState = rememberLazyListState()
 
-    NuvioScreen(modifier = modifier) {
+    NuvioScreen(modifier = modifier, listState = listState) {
         stickyHeader {
             NuvioScreenHeader(
                 title = if (isNew) {
@@ -139,7 +163,8 @@ fun ProfileEditScreen(
                 name = name,
                 isNew = isNew,
                 profileIndex = currentProfile?.profileIndex,
-                usesPrimaryAddons = usesPrimaryAddons,
+                usesPrimaryAddons = effectiveUsesPrimaryAddons,
+                showPrimaryAddonsOption = !primaryAddonsLockedOn,
                 onNameChange = { name = it },
                 onUsesPrimaryAddonsChange = { usesPrimaryAddons = it },
                 selectedAvatar = visibleAvatarItem,
@@ -149,37 +174,51 @@ fun ProfileEditScreen(
             )
         }
 
-        item {
-            NuvioSurfaceCard {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = stringResource(Res.string.profile_custom_avatar_url),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = stringResource(Res.string.profile_custom_avatar_url_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    NuvioInputField(
-                        value = avatarUrl,
-                        onValueChange = { value ->
-                            avatarUrl = value
-                            if (value.isNotBlank()) {
-                                selectedAvatarId = null
+        if (compactAvatarPicker && !isNew) {
+            item {
+                ProfileEditSecuritySection(
+                    pinEnabled = currentProfile?.pinEnabled == true,
+                    onSetPin = { showPinSetup = true },
+                    onRemovePin = { showPinClear = true },
+                )
+            }
+        }
+
+        if (compactAvatarPicker) {
+            item {
+                ProfileEditSaveSection(
+                    isNew = isNew,
+                    isSaving = isSaving,
+                    enabled = name.isNotBlank() && !avatarUrlIsInvalid && !isSaving,
+                    onSave = {
+                        isSaving = true
+                        scope.launch {
+                            val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
+                            if (isNew) {
+                                ProfileRepository.createProfile(
+                                    name = name,
+                                    avatarColorHex = avatarColorHex,
+                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
+                                    avatarUrl = customAvatarUrl,
+                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
+                                )
+                            } else {
+                                ProfileRepository.updateProfile(
+                                    profileIndex = currentProfile!!.profileIndex,
+                                    name = name,
+                                    avatarColorHex = avatarColorHex,
+                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
+                                    avatarUrl = customAvatarUrl,
+                                    profileBackgroundId = selectedBackgroundId,
+                                    profileBackgroundUrl = selectedBackgroundUrl,
+                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
+                                )
                             }
-                        },
-                        placeholder = stringResource(Res.string.profile_custom_avatar_url_placeholder),
-                    )
-                    if (avatarUrlIsInvalid) {
-                        Text(
-                            text = stringResource(Res.string.profile_avatar_url_invalid),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
+                            isSaving = false
+                            onSaved()
+                        }
+                    },
+                )
             }
         }
 
@@ -221,18 +260,24 @@ fun ProfileEditScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        text = selectedAvatarItem?.displayName
-                            ?: if (avatars.isEmpty()) {
-                                stringResource(Res.string.profile_loading_avatars)
-                            } else {
-                                stringResource(Res.string.profile_select_avatar)
-                            },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
 
-                    if (avatars.isNotEmpty()) {
+                    if (compactAvatarPicker && avatarCategories.isNotEmpty()) {
+                        NuvioDropdownChip(
+                            title = stringResource(Res.string.profile_select_avatar_category),
+                            label = selectedAvatarCategory?.let(::avatarCategoryDisplayName)
+                                ?: stringResource(Res.string.profile_select_avatar_category),
+                            selectedKey = selectedAvatarCategory,
+                            options = avatarCategories.map { category ->
+                                NuvioDropdownOption(
+                                    key = category,
+                                    label = avatarCategoryDisplayName(category),
+                                )
+                            },
+                            onSelected = { selectedAvatarCategory = it.key },
+                        )
+                    }
+
+                    if (avatarsInSelectedCategory.isNotEmpty()) {
                         val avatarSpacing = 10.dp
                         val minAvatarSize = 58.dp
                         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -245,7 +290,7 @@ fun ProfileEditScreen(
                                 verticalArrangement = Arrangement.spacedBy(avatarSpacing),
                                 maxItemsInEachRow = columns,
                             ) {
-                                avatars.forEach { avatar ->
+                                avatarsInSelectedCategory.forEach { avatar ->
                                     AvatarChoiceItem(
                                         avatar = avatar,
                                         size = avatarSize,
@@ -253,6 +298,12 @@ fun ProfileEditScreen(
                                         onClick = {
                                             avatarUrl = ""
                                             selectedAvatarId = avatar.id
+                                            selectedAvatarCategory = avatar.category
+                                            if (compactAvatarPicker) {
+                                                scope.launch {
+                                                    listState.animateScrollToItem(1)
+                                                }
+                                            }
                                         },
                                     )
                                 }
@@ -263,80 +314,52 @@ fun ProfileEditScreen(
             }
         }
 
-        if (!isNew) {
+        if (!compactAvatarPicker && !isNew) {
             item {
-                NuvioSurfaceCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(
-                            text = stringResource(Res.string.profile_security),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = if (currentProfile?.pinEnabled == true) {
-                                stringResource(Res.string.profile_security_pin_enabled)
-                            } else {
-                                stringResource(Res.string.profile_security_pin_disabled)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (currentProfile?.pinEnabled == true) {
-                            NuvioPrimaryButton(
-                                text = stringResource(Res.string.profile_remove_pin_lock),
-                                onClick = { showPinClear = true },
-                            )
-                        } else {
-                            NuvioPrimaryButton(
-                                text = stringResource(Res.string.profile_set_pin_lock),
-                                onClick = { showPinSetup = true },
-                            )
-                        }
-                    }
-                }
+                ProfileEditSecuritySection(
+                    pinEnabled = currentProfile?.pinEnabled == true,
+                    onSetPin = { showPinSetup = true },
+                    onRemovePin = { showPinClear = true },
+                )
             }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            NuvioPrimaryButton(
-                text = if (isSaving) {
-                    stringResource(Res.string.profile_saving)
-                } else if (isNew) {
-                    stringResource(Res.string.profile_create_profile)
-                } else {
-                    stringResource(Res.string.collections_editor_save_changes)
-                },
-                enabled = name.isNotBlank() && !avatarUrlIsInvalid && !isSaving,
-                onClick = {
-                    isSaving = true
-                    scope.launch {
-                        val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
-                        if (isNew) {
-                            ProfileRepository.createProfile(
-                                name = name,
-                                avatarColorHex = avatarColorHex,
-                                avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
-                                avatarUrl = customAvatarUrl,
-                                usesPrimaryAddons = usesPrimaryAddons,
-                            )
-                        } else {
-                            ProfileRepository.updateProfile(
-                                profileIndex = currentProfile!!.profileIndex,
-                                name = name,
-                                avatarColorHex = avatarColorHex,
-                                avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
-                                avatarUrl = customAvatarUrl,
-                                profileBackgroundId = selectedBackgroundId,
-                                profileBackgroundUrl = selectedBackgroundUrl,
-                                usesPrimaryAddons = usesPrimaryAddons,
-                            )
+        if (!compactAvatarPicker) {
+            item {
+                ProfileEditSaveSection(
+                    isNew = isNew,
+                    isSaving = isSaving,
+                    enabled = name.isNotBlank() && !avatarUrlIsInvalid && !isSaving,
+                    onSave = {
+                        isSaving = true
+                        scope.launch {
+                            val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
+                            if (isNew) {
+                                ProfileRepository.createProfile(
+                                    name = name,
+                                    avatarColorHex = avatarColorHex,
+                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
+                                    avatarUrl = customAvatarUrl,
+                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
+                                )
+                            } else {
+                                ProfileRepository.updateProfile(
+                                    profileIndex = currentProfile!!.profileIndex,
+                                    name = name,
+                                    avatarColorHex = avatarColorHex,
+                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
+                                    avatarUrl = customAvatarUrl,
+                                    profileBackgroundId = selectedBackgroundId,
+                                    profileBackgroundUrl = selectedBackgroundUrl,
+                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
+                                )
+                            }
+                            isSaving = false
+                            onSaved()
                         }
-                        isSaving = false
-                        onSaved()
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
 
         if (!isNew && (currentProfile?.profileIndex ?: 0) > 1) {
@@ -407,12 +430,77 @@ fun ProfileEditScreen(
     }
 }
 
+private fun avatarCategoryDisplayName(category: String): String =
+    category.replace('_', ' ').replace('-', ' ')
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { word -> word.replaceFirstChar { char -> char.titlecase() } }
+
+@Composable
+private fun ProfileEditSecuritySection(
+    pinEnabled: Boolean,
+    onSetPin: () -> Unit,
+    onRemovePin: () -> Unit,
+) {
+    NuvioSurfaceCard {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(
+                text = stringResource(Res.string.profile_security),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = if (pinEnabled) {
+                    stringResource(Res.string.profile_security_pin_enabled)
+                } else {
+                    stringResource(Res.string.profile_security_pin_disabled)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (pinEnabled) {
+                NuvioPrimaryButton(
+                    text = stringResource(Res.string.profile_remove_pin_lock),
+                    onClick = onRemovePin,
+                )
+            } else {
+                NuvioPrimaryButton(
+                    text = stringResource(Res.string.profile_set_pin_lock),
+                    onClick = onSetPin,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileEditSaveSection(
+    isNew: Boolean,
+    isSaving: Boolean,
+    enabled: Boolean,
+    onSave: () -> Unit,
+) {
+    Spacer(modifier = Modifier.height(8.dp))
+    NuvioPrimaryButton(
+        text = if (isSaving) {
+            stringResource(Res.string.profile_saving)
+        } else if (isNew) {
+            stringResource(Res.string.profile_create_profile)
+        } else {
+            stringResource(Res.string.collections_editor_save_changes)
+        },
+        enabled = enabled,
+        onClick = onSave,
+    )
+}
+
 @Composable
 private fun ProfileIdentityCard(
     name: String,
     isNew: Boolean,
     profileIndex: Int?,
     usesPrimaryAddons: Boolean,
+    showPrimaryAddonsOption: Boolean,
     onNameChange: (String) -> Unit,
     onUsesPrimaryAddonsChange: (Boolean) -> Unit,
     selectedAvatar: AvatarCatalogItem?,
@@ -494,19 +582,25 @@ private fun ProfileIdentityCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = listOf(
-                            if (isNew) {
-                                stringResource(Res.string.profile_new)
-                            } else {
-                                profileIndex?.let { stringResource(Res.string.profile_label_number, it) }
-                                    ?: stringResource(Res.string.profile_unnamed)
-                            },
-                            if (usesPrimaryAddons) {
-                                stringResource(Res.string.profile_primary_addons_on)
-                            } else {
-                                stringResource(Res.string.profile_primary_addons_off)
-                            },
-                        ).joinToString("  |  "),
+                        text = buildList {
+                            add(
+                                if (isNew) {
+                                    stringResource(Res.string.profile_new)
+                                } else {
+                                    profileIndex?.let { stringResource(Res.string.profile_label_number, it) }
+                                        ?: stringResource(Res.string.profile_unnamed)
+                                },
+                            )
+                            if (showPrimaryAddonsOption) {
+                                add(
+                                    if (usesPrimaryAddons) {
+                                        stringResource(Res.string.profile_primary_addons_on)
+                                    } else {
+                                        stringResource(Res.string.profile_primary_addons_off)
+                                    },
+                                )
+                            }
+                        }.joinToString("  |  "),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -532,12 +626,14 @@ private fun ProfileIdentityCard(
                 placeholder = stringResource(Res.string.profile_name_placeholder),
             )
 
-            ProfileOptionRow(
-                title = stringResource(Res.string.profile_use_primary_addons),
-                description = stringResource(Res.string.profile_use_primary_addons_description),
-                checked = usesPrimaryAddons,
-                onCheckedChange = onUsesPrimaryAddonsChange,
-            )
+            if (showPrimaryAddonsOption) {
+                ProfileOptionRow(
+                    title = stringResource(Res.string.profile_use_primary_addons),
+                    description = stringResource(Res.string.profile_use_primary_addons_description),
+                    checked = usesPrimaryAddons,
+                    onCheckedChange = onUsesPrimaryAddonsChange,
+                )
+            }
         }
     }
 }

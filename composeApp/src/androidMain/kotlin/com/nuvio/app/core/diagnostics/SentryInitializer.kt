@@ -5,6 +5,7 @@ import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.features.settings.SentrySettingsRepository
 import io.sentry.Sentry
 import io.sentry.SentryEvent
+import io.sentry.SentryLevel
 import io.sentry.SentryOptions
 import io.sentry.android.core.SentryAndroid
 import kotlinx.coroutines.CoroutineScope
@@ -103,4 +104,41 @@ object SentryInitializer {
         }
         return values
     }
+
+    internal fun reportPlaybackFailure(report: PlaybackFailureReport) {
+        if (!active || !Sentry.isEnabled()) return
+        Sentry.captureException(PlaybackFailure(report.summary())) { scope ->
+            scope.level = SentryLevel.ERROR
+            scope.setFingerprint(report.fingerprint())
+            fun tag(key: String, value: String?) {
+                val cleaned = sentryTag(value) ?: return
+                scope.setTag(key, cleaned)
+            }
+            fun extra(key: String, value: String?) {
+                if (value.isNullOrBlank()) return
+                scope.setExtra(key, value)
+            }
+            tag("playback.engine", report.engine)
+            tag("playback.host", report.host)
+            tag("playback.provider", report.provider)
+            tag("playback.stream_type", report.streamType)
+            tag("playback.error_code", report.errorCode)
+            tag("playback.exception", report.exceptionClass)
+            tag("playback.video_codec", report.videoCodec)
+            tag("playback.mime", report.mimeType)
+            extra("cause_class", report.causeClass)
+            extra("cause_message", report.causeMessage)
+            extra("content_id", report.contentId)
+            extra("title", report.title)
+            extra("season", report.season?.toString())
+            extra("episode", report.episode?.toString())
+            extra("stream_label", report.streamLabel)
+            extra("message", report.message)
+        }
+    }
+
+    private fun sentryTag(value: String?): String? =
+        value?.replace(Regex("\\s+"), " ")?.trim()?.take(200)?.takeIf { it.isNotEmpty() }
 }
+
+private class PlaybackFailure(message: String) : Exception(message)

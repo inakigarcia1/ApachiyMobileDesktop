@@ -1328,6 +1328,7 @@
     <string name="profile_security_pin_disabled">Añade un PIN si quieres que este perfil quede bloqueado antes de cambiar a él.</string>
     <string name="profile_security_pin_enabled">Este perfil está protegido con un PIN.</string>
     <string name="profile_select_avatar">Selecciona un avatar para este perfil.</string>
+    <string name="profile_select_avatar_category">Seleccionar categoría</string>
     <string name="profile_set_pin_lock">Configurar bloqueo PIN</string>
     <string name="profile_unnamed">Perfil sin nombre</string>
     <string name="profile_use_primary_addons">Usar addons principales</string>
@@ -1427,6 +1428,7 @@
     <string name="notifications_test_send_failed">No se pudo enviar una notificación de prueba.</string>
     <string name="notifications_test_sent_for">Notificación de prueba enviada para %1$s.</string>
     <string name="player_unable_to_play_stream">No se puede reproducir este stream.</string>
+    <string name="player_source_incompatible_trying_next">La fuente seleccionada no es compatible. Probando otra…</string>
     <string name="player_engine_unavailable_rebuild">Motor de reproductor MPV no disponible. Reconstruya la aplicación.</string>
     <string name="profile_pin_changed_requires_refresh">El PIN de este perfil cambió. Conéctate una vez para actualizar el bloqueo en este dispositivo.</string>
     <string name="profile_pin_clear_failed">No se pudo quitar el bloqueo por PIN. Inténtalo de nuevo.</string>

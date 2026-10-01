@@ -107,6 +107,8 @@ internal class PlayerScreenRuntime(
     val isSeries: Boolean get() = parentMetaType == "series"
 
     lateinit var scope: CoroutineScope
+    val compatibilityAttemptedUrls = mutableSetOf<String>()
+    var compatibilityReloadStarted: Boolean = false
     lateinit var hapticFeedback: HapticFeedback
 
     var playerSettingsUiState by mutableStateOf(PlayerSettingsUiState())
@@ -181,6 +183,7 @@ internal class PlayerScreenRuntime(
     val playerReleaseSurfaceRetention = PlayerReleaseSurfaceRetention()
     var playerControllerSourceUrl by mutableStateOf<String?>(null)
     var errorMessage by mutableStateOf<String?>(null)
+    var reportedPlaybackFailureMessage: String? = null
     var isScrubbingTimeline by mutableStateOf(false)
     var scrubbingPositionMs by mutableStateOf<Long?>(null)
     /** Keeps the timeline thumb at the user seek target until playback position catches up. */

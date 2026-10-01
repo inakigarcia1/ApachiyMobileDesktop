@@ -1158,7 +1158,7 @@
     <string name="settings_playback_section_player">PLAYER</string>
     <string name="settings_playback_section_skip_segments">SKIP SEGMENTS</string>
     <string name="settings_playback_section_stream_auto_play">STREAM AUTO-PLAY</string>
-    <string name="settings_playback_torbox_speed_title">Bandwidth (TorBox)</string>
+    <string name="settings_playback_torbox_speed_title">Bandwidth</string>
     <string name="settings_playback_torbox_speed_none">No saved measurement</string>
     <string name="settings_playback_torbox_speed_last">Last: %1$s Mbps · %2$s</string>
     <string name="settings_playback_torbox_measure_now">Measure now</string>
@@ -1614,6 +1614,7 @@
     <string name="profile_security_pin_disabled">Add a PIN if you want this profile locked before switching into it.</string>
     <string name="profile_security_pin_enabled">This profile is protected with a PIN.</string>
     <string name="profile_select_avatar">Select an avatar for this profile.</string>
+    <string name="profile_select_avatar_category">Select category</string>
     <string name="profile_set_pin_lock">Set PIN Lock</string>
     <string name="profile_unnamed">Unnamed profile</string>
     <string name="profile_use_primary_addons">Use Primary Addons</string>
@@ -1724,6 +1725,7 @@
     <string name="notifications_test_send_failed">Failed to send a test notification.</string>
     <string name="notifications_test_sent_for">Test notification sent for %1$s.</string>
     <string name="player_unable_to_play_stream">Unable to play this stream.</string>
+    <string name="player_source_incompatible_trying_next">This source is not compatible. Trying another…</string>
     <string name="player_engine_unavailable_rebuild">MPV player engine not available. Please rebuild the app.</string>
     <string name="profile_pin_changed_requires_refresh">This profile PIN changed. Connect once to refresh the lock on this device.</string>
     <string name="profile_pin_clear_failed">Couldn't remove PIN lock. Try again.</string>
