@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URI
+import java.security.MessageDigest
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Properties
@@ -1249,6 +1250,22 @@ tasks.withType<KotlinCompilationTask<*>>().configureEach {
     dependsOn(generateRuntimeConfigs)
 }
 
+// sherpa-onnx ~50 MB. Downloaded once into libs/ and gitignored. Not packaged as the C/C++ JNI stubs.
+val sherpaOnnxVersion = "1.13.8"
+val sherpaOnnxSha256 = "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96"
+val sherpaOnnxAar: File = project.file("libs/sherpa-onnx-$sherpaOnnxVersion.aar").also { aar ->
+    fun sha256(file: File): String = MessageDigest.getInstance("SHA-256")
+        .digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+    if (aar.isFile && sha256(aar) == sherpaOnnxSha256) return@also
+    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaOnnxVersion/sherpa-onnx-$sherpaOnnxVersion.aar"
+    logger.lifecycle("Downloading $url")
+    aar.parentFile.mkdirs()
+    val partial = File(aar.path + ".part")
+    URI(url).toURL().openStream().use { input -> partial.outputStream().use { input.copyTo(it) } }
+    check(sha256(partial) == sherpaOnnxSha256) { "Checksum mismatch for $url" }
+    check(partial.renameTo(aar)) { "Could not move ${partial.name} into libs/" }
+}
+
 kotlin {
     android {
         namespace = "com.nuvio.app"
@@ -1377,6 +1394,7 @@ kotlin {
                 implementation(libs.mpv.android.lib)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
                 implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
+                implementation(files(sherpaOnnxAar))
                 if (androidDistribution == "full") {
                     implementation(files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
                     implementation(libs.ksoup)

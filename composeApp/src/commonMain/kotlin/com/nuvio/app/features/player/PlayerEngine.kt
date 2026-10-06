@@ -42,6 +42,8 @@ interface PlayerEngineController {
         sourceHeaders: Map<String, String>,
         subtitleUrl: String,
         subtitleHeaders: Map<String, String>,
+        userChoseSubtitle: Boolean = false,
+        isStillSelected: () -> Boolean = { true },
     ): Boolean = false
 
     /** Replaces the external subtitle already on screen with [body], without reloading the video. */

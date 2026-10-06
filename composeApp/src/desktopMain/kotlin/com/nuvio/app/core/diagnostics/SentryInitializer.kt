@@ -104,6 +104,11 @@ object SentryInitializer {
         }
     }
 
+    internal fun reportUnexpectedSignOut(reason: String) {
+        if (!active || !Sentry.isEnabled()) return
+        Sentry.captureMessage("unexpected_sign_out: $reason", SentryLevel.ERROR)
+    }
+
     internal fun reportPlaybackFailure(report: PlaybackFailureReport) {
         if (!active || !Sentry.isEnabled()) return
         Sentry.captureException(PlaybackFailure(report.summary())) { scope ->

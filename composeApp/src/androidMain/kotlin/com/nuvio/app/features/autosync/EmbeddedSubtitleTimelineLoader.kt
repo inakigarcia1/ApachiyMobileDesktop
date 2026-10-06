@@ -398,39 +398,50 @@ internal object EmbeddedSubtitleTimelineLoader {
             )
         }
 
-        val referenceTracks = subtitleTracks.mapNotNull { track ->
-            val parsedTimeline = parsedCues[track.number] ?: return@mapNotNull null
-            val cues = parsedTimeline.cues
-                .sortedBy { it.startTimeMs }
-                .distinctBy { it.startTimeMs }
-            if (cues.size < MIN_INDEXED_CUES) return@mapNotNull null
-            val spanMs = cues.last().startTimeMs - cues.first().startTimeMs
-            if (spanMs < MIN_INDEXED_SPAN_MS) return@mapNotNull null
-
-            var selectionFlags = 0
-            if (track.forced) selectionFlags = selectionFlags or C.SELECTION_FLAG_FORCED
-
-            var roleFlags = 0
-            if (track.commentary) roleFlags = roleFlags or C.ROLE_FLAG_COMMENTARY
-            if (track.hearingImpaired) {
-                roleFlags = roleFlags or C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND
+        val referenceTracks = subtitleTracks.flatMap { track ->
+            val parsedTimeline = parsedCues[track.number] ?: return@flatMap emptyList()
+            val isPgs = track.codecId.equals(MATROSKA_PGS_CODEC_ID, ignoreCase = true)
+            val variants = if (!isPgs) {
+                listOf(parsedTimeline.cues to "")
+            } else if (parsedTimeline.alternateCues.size >= MIN_INDEXED_CUES) {
+                listOf(parsedTimeline.cues to "#p0", parsedTimeline.alternateCues to "#p1")
+            } else {
+                listOf(parsedTimeline.cues to "#pgs")
             }
-            if (track.visualImpaired || track.textDescriptions) {
-                roleFlags = roleFlags or C.ROLE_FLAG_DESCRIBES_VIDEO
-            }
+            variants.mapNotNull { (rawCues, suffix) ->
+                val cues = rawCues.sortedBy { it.startTimeMs }.distinctBy { it.startTimeMs }
+                if (cues.size < MIN_INDEXED_CUES) return@mapNotNull null
+                val spanMs = cues.last().startTimeMs - cues.first().startTimeMs
+                if (spanMs < MIN_INDEXED_SPAN_MS) return@mapNotNull null
 
-            ReferenceTrack(
-                key = "mkv-cues:${track.number}",
-                language = track.languageIetf?.takeIf { it.isNotBlank() }
-                    ?: track.language?.takeIf { it.isNotBlank() },
-                cues = cues,
-                label = track.name?.takeIf { it.isNotBlank() }
-                    ?: buildFallbackTrackLabel(track),
-                selectionFlags = selectionFlags,
-                roleFlags = roleFlags,
-                generation = -1L,
-                estimatedEndStartsMs = parsedTimeline.estimatedEndStartsMs,
-            )
+                var selectionFlags = 0
+                if (track.forced) selectionFlags = selectionFlags or C.SELECTION_FLAG_FORCED
+
+                var roleFlags = 0
+                if (track.commentary) roleFlags = roleFlags or C.ROLE_FLAG_COMMENTARY
+                if (track.hearingImpaired) {
+                    roleFlags = roleFlags or C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND
+                }
+                if (track.visualImpaired || track.textDescriptions) {
+                    roleFlags = roleFlags or C.ROLE_FLAG_DESCRIBES_VIDEO
+                }
+
+                ReferenceTrack(
+                    key = "mkv-cues:${track.number}$suffix",
+                    language = track.languageIetf?.takeIf { it.isNotBlank() }
+                        ?: track.language?.takeIf { it.isNotBlank() },
+                    cues = cues,
+                    label = track.name?.takeIf { it.isNotBlank() }
+                        ?: buildFallbackTrackLabel(track),
+                    selectionFlags = selectionFlags,
+                    roleFlags = roleFlags,
+                    generation = -1L,
+                    estimatedEndStartsMs = parsedTimeline.estimatedEndStartsMs,
+                )
+            }
+        }.let { built ->
+            val text = built.filter { !it.key.contains("#p") }
+            if (text.isNotEmpty()) text else built
         }
 
         if (referenceTracks.isEmpty()) {
@@ -1293,39 +1304,44 @@ internal object EmbeddedSubtitleTimelineLoader {
             return buildDefaultIndexedTimeline(sorted)
         }
 
-        val cues = ArrayList<SubtitleSyncCue>(pairedCount)
-        var index = 0
-        while (index + 1 < sorted.size) {
-            val display = sorted[index]
-            val clear = sorted[index + 1]
-            if (clear.startTimeMs > display.startTimeMs) {
-                val explicitEndMs = display.explicitDurationMs
-                    ?.takeIf { duration ->
-                        duration > 0L && display.startTimeMs <= Long.MAX_VALUE - duration
+        fun phaseCues(startIndex: Int): List<SubtitleSyncCue> {
+            val phase = ArrayList<SubtitleSyncCue>(pairedCount)
+            var index = startIndex
+            while (index + 1 < sorted.size) {
+                val display = sorted[index]
+                val clear = sorted[index + 1]
+                if (clear.startTimeMs > display.startTimeMs) {
+                    val explicitEndMs = display.explicitDurationMs
+                        ?.takeIf { duration ->
+                            duration > 0L && display.startTimeMs <= Long.MAX_VALUE - duration
+                        }
+                        ?.let { duration -> display.startTimeMs + duration }
+                    val endTimeMs = explicitEndMs
+                        ?.coerceAtMost(clear.startTimeMs)
+                        ?: clear.startTimeMs
+                    if (endTimeMs > display.startTimeMs) {
+                        phase += SubtitleSyncCue(
+                            startTimeMs = display.startTimeMs,
+                            endTimeMs = endTimeMs,
+                            text = "",
+                        )
                     }
-                    ?.let { duration -> display.startTimeMs + duration }
-                val endTimeMs = explicitEndMs
-                    ?.coerceAtMost(clear.startTimeMs)
-                    ?: clear.startTimeMs
-
-                if (endTimeMs > display.startTimeMs) {
-                    cues += SubtitleSyncCue(
-                        startTimeMs = display.startTimeMs,
-                        endTimeMs = endTimeMs,
-                        text = "",
-                    )
                 }
+                index += 2
             }
-            index += 2
+            return phase
         }
 
+        val cues = phaseCues(0)
+        val alternate = phaseCues(1)
         AutoSyncDebugLog.verbose {
-            "PGS index normalized raw=" + sorted.size + " visible=" + cues.size
+            "PGS index normalized raw=" + sorted.size + " visible=" + cues.size + " alternate=" + alternate.size
         }
 
         return IndexedSubtitleTimeline(
             cues = cues,
             estimatedEndStartsMs = emptySet(),
+            alternateCues = alternate,
         )
     }
 
@@ -1867,6 +1883,7 @@ internal object EmbeddedSubtitleTimelineLoader {
     private data class IndexedSubtitleTimeline(
         val cues: List<SubtitleSyncCue>,
         val estimatedEndStartsMs: Set<Long>,
+        val alternateCues: List<SubtitleSyncCue> = emptyList(),
     )
 }
 

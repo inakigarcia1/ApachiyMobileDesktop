@@ -286,6 +286,7 @@ internal object MkvTextSubtitleParser {
         EmbeddedTextCodec.Ass -> "S_TEXT/ASS"
         EmbeddedTextCodec.Ssa -> "S_TEXT/SSA"
         EmbeddedTextCodec.WebVtt -> "S_TEXT/WEBVTT"
+        EmbeddedTextCodec.Pgs -> "S_HDMV/PGS"
     }
 
     private fun startsWithCluster(data: ByteArray, offset: Int): Boolean =
@@ -547,6 +548,7 @@ internal object MkvTextSubtitleParser {
         "S_TEXT/ASS" -> EmbeddedTextCodec.Ass
         "S_TEXT/SSA" -> EmbeddedTextCodec.Ssa
         "S_TEXT/WEBVTT" -> EmbeddedTextCodec.WebVtt
+        "S_HDMV/PGS" -> EmbeddedTextCodec.Pgs
         else -> null
     }
 

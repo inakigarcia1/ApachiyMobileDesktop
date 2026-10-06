@@ -108,6 +108,7 @@ internal class PlayerScreenRuntime(
 
     lateinit var scope: CoroutineScope
     val compatibilityAttemptedUrls = mutableSetOf<String>()
+    var unsupportedAudioCheckedUrl: String? = null
     var compatibilityReloadStarted: Boolean = false
     lateinit var hapticFeedback: HapticFeedback
 

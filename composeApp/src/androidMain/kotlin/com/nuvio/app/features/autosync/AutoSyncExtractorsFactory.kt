@@ -17,15 +17,18 @@ import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.SniffFailure
 import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.text.CueDecoder
+import com.nuvio.app.features.player.RewrappableExtractor
 import com.nuvio.app.features.player.SubtitleSyncCue
+import com.nuvio.app.features.player.audiosync.AudioSyncTaps
 import java.io.EOFException
 import kotlin.math.max
 
 /** Observes embedded text timestamps while forwarding the extractor output unchanged to Media3. */
 internal class AutoSyncExtractorsFactory(
-    private val delegate: ExtractorsFactory,
+    delegate: ExtractorsFactory,
     private val sourceKey: String,
 ) : ExtractorsFactory {
+    private val delegate: ExtractorsFactory = AudioSyncTaps.wrapExtractors(delegate, sourceKey)
     init {
         EmbeddedSubtitleCueStore.reset(sourceKey)
     }
@@ -44,7 +47,10 @@ internal class AutoSyncExtractorsFactory(
 private class ObservingExtractor(
     private val delegate: Extractor,
     private val sourceKey: String,
-) : Extractor {
+) : RewrappableExtractor {
+    override val wrappedExtractor: Extractor get() = delegate
+    override fun rewrap(inner: Extractor): Extractor = ObservingExtractor(inner, sourceKey)
+
     override fun sniff(input: ExtractorInput) = delegate.sniff(input)
     override fun getSniffFailureDetails(): List<SniffFailure> = delegate.getSniffFailureDetails()
     override fun init(output: ExtractorOutput) = delegate.init(ObservingExtractorOutput(output, sourceKey))
@@ -59,7 +65,7 @@ private class ObservingExtractor(
     }
 
     override fun release() = delegate.release()
-    override fun getUnderlyingImplementation(): Extractor = delegate.getUnderlyingImplementation()
+    override fun getUnderlyingImplementation(): Extractor = delegate.underlyingImplementation
 }
 
 private class ObservingExtractorOutput(

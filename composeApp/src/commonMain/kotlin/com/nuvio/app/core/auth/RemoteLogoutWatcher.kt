@@ -74,7 +74,7 @@ object RemoteLogoutWatcher {
                         changes.collect { action ->
                             if (actionMatchesThisDevice(action, installationId)) {
                                 log.w { "device row changed remotely; signing out" }
-                                AuthRepository.signOut()
+                                AuthRepository.signOut(explicit = false, reason = "device_row_deleted")
                             }
                         }
                     }

@@ -20,6 +20,7 @@ import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.PresenceSnapshot
 import com.nuvio.app.core.ui.nuvio
+import com.nuvio.app.features.autosync.bubble.AutoSyncBubbleToastHost
 import com.nuvio.app.features.player.embedded.AddonSubtitleLoadingGate
 import com.nuvio.app.features.debrid.DebridSettingsRepository
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
@@ -562,6 +563,9 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
 
         if (!isDesktop) {
             RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
+        }
+        if (!isInPip) {
+            AutoSyncBubbleToastHost(controlsVisible)
         }
         RenderPlaybackOverlays(
             runtime = runtime,

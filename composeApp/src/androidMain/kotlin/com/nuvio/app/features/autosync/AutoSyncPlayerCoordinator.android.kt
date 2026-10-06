@@ -6,10 +6,13 @@ import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.media3.common.C
+import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.features.player.PlayerSubtitleUtils
 import com.nuvio.app.features.player.SidecarSubtitleController
+import com.nuvio.app.features.player.SubtitleSyncStatus
+import com.nuvio.app.features.player.audiosync.AudioSyncFallback
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -32,12 +35,26 @@ internal class AutoSyncPlayerCoordinator(
     private val player: ExoPlayer,
     private val sidecar: SidecarSubtitleController,
     private val sourceUrl: String,
+    private val sourceAudioUrl: String?,
+    private val dataSourceFactory: DataSource.Factory?,
     private val sourceHeaders: Map<String, String>,
     private val getSubtitleHeaders: (String) -> Map<String, String>,
     private val getUseLibass: () -> Boolean,
     private val onMimeTypeSelected: (String) -> Unit,
     private val onSubtitleDelayChanged: (Int) -> Unit,
 ) {
+    private val audioFallback = AudioSyncFallback(
+        context = context,
+        scope = scope,
+        player = player,
+        sidecar = sidecar,
+        sourceUrl = sourceUrl,
+        sourceAudioUrl = sourceAudioUrl,
+        dataSourceFactory = dataSourceFactory,
+        getSubtitleHeaders = getSubtitleHeaders,
+        onSubtitleReplaced = SubtitleSyncStatus::requestSubtitleSwitch,
+        onDevNotice = ::showAutoSyncNotice,
+    )
     private var job: Job? = null
     private var retryJob: Job? = null
     private var retryContext: RetryContext? = null
@@ -49,6 +66,7 @@ internal class AutoSyncPlayerCoordinator(
 
     fun setCandidates(value: List<AutoSyncSubtitleCandidate>) {
         candidates = value.distinctBy { it.url }
+        audioFallback.setCandidates(candidates.map { Triple(it.url, it.language, it.name) })
     }
 
     fun setAppliedListener(
@@ -68,6 +86,7 @@ internal class AutoSyncPlayerCoordinator(
     fun cancel() {
         job?.cancel()
         job = null
+        audioFallback.stop()
         invalidateRetryContext()
     }
 
@@ -85,6 +104,7 @@ internal class AutoSyncPlayerCoordinator(
 
     fun dispose() {
         cancel()
+        audioFallback.release()
         appliedListener = null
     }
 
@@ -283,6 +303,8 @@ internal class AutoSyncPlayerCoordinator(
         url: String,
         candidateScope: AutoSyncCandidateScope,
         fallbackAttach: (String) -> Unit,
+        userChoseSubtitle: Boolean = false,
+        isStillSelected: () -> Boolean = { true },
     ) {
         cancel()
 
@@ -335,7 +357,11 @@ internal class AutoSyncPlayerCoordinator(
 
         val selectedSubtitleBodyDeferred = sidecar.rawBodyDeferredFor(url)
 
+        audioFallback.setMayReplaceSubtitle(!userChoseSubtitle)
+        audioFallback.arm()
+
         fun restoreOriginalSubtitleIfSidecarFailed() {
+            if (!isStillSelected()) return
             if (
                 shouldRestoreOriginalSubtitle(
                     activeSidecarSubtitleKey = sidecar.activeSidecarSubtitleKey,
@@ -374,6 +400,11 @@ internal class AutoSyncPlayerCoordinator(
             }
 
             if (resolved == null) {
+                val handedToAudio = noSubtitleTracks &&
+                    sidecar.activeSidecarSubtitleKey == url &&
+                    isStillSelected() &&
+                    audioFallback.takeOver(url)
+                if (handedToAudio) return@launch
                 restoreOriginalSubtitleIfSidecarFailed()
                 if (AutoSyncDebugLog.ENABLED) {
                     AutoSyncDebugLog.finishAndCopy(
@@ -386,6 +417,8 @@ internal class AutoSyncPlayerCoordinator(
                 )
                 return@launch
             }
+
+            audioFallback.disarm()
 
             val chosenUrl = resolved.subtitleUrl
             val timeline = resolved.timeline

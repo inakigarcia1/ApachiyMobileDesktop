@@ -99,6 +99,8 @@ open class MainActivity : AppCompatActivity() {
         HomeCatalogSettingsStorage.initialize(applicationContext)
         PlayerSettingsStorage.initialize(applicationContext)
         com.nuvio.app.features.autosync.AutoSyncPreferencesAndroid.initialize(applicationContext)
+        com.nuvio.app.features.player.audiosync.AudioSyncFallback.initialize(applicationContext)
+        com.nuvio.app.features.autosync.bubble.AutoSyncBubbleToastsAndroid.initialize(applicationContext)
         PlayerTrackPreferenceStorage.initialize(applicationContext)
         P2pSettingsStorage.initialize(applicationContext)
         P2pStreamingEngine.initialize(applicationContext)

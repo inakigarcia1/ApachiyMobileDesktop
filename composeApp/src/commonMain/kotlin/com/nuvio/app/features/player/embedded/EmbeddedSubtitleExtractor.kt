@@ -550,28 +550,35 @@ internal object EmbeddedSubtitleExtractor {
         if (tracks.isEmpty()) {
             return DialogueTimingIndex(noSubtitleTracks = layout.tracksOffset != null || prefix.size >= 64)
         }
-        if (hasEmbeddedSpanishTextTrack(tracks)) {
-            return DialogueTimingIndex(hasEmbeddedSpanish = true, tracks = tracks)
+        val textTracks = tracks.filter { it.codec != EmbeddedTextCodec.Pgs }
+        if (hasEmbeddedSpanishTextTrack(textTracks)) {
+            return DialogueTimingIndex(hasEmbeddedSpanish = true, tracks = textTracks)
         }
-        val cuesOffset = layout.cuesOffset ?: return DialogueTimingIndex(tracks = tracks)
+        val cuesOffset = layout.cuesOffset ?: return DialogueTimingIndex(tracks = textTracks)
         val cuesBytes = readFullCues(sourceUrl, headers, prefix, cuesOffset, null)
-            ?: return DialogueTimingIndex(tracks = tracks)
+            ?: return DialogueTimingIndex(tracks = textTracks)
         val refs = MkvTextSubtitleParser.parseCues(cuesBytes)
-        if (refs.isEmpty()) return DialogueTimingIndex(tracks = tracks)
+        if (refs.isEmpty()) return DialogueTimingIndex(tracks = textTracks)
         val scale = layout.timestampScale.coerceAtLeast(1L)
-        val timed = tracks.map { track ->
-            val starts = refs
-                .filter { it.trackNumber == track.trackNumber }
-                .map { it.timeTicks * scale / 1_000_000L }
-                .sorted()
-            val cues = starts.mapIndexed { index, start ->
-                val next = starts.getOrNull(index + 1)
-                val end = if (next == null) start + 2_000L else minOf(next, start + 4_000L)
-                EmbeddedSubtitleCue(start, end.coerceAtLeast(start + 1L), "")
-            }
-            track.copy(cues = cues, estimatedCueEnds = true)
+        val timedText = textTracks.map { track ->
+            track.copy(cues = cueStartsToTimeline(refs, track.trackNumber, scale), estimatedCueEnds = true)
         }
-        return DialogueTimingIndex(tracks = timed)
+        if (timedText.isNotEmpty()) {
+            return DialogueTimingIndex(tracks = timedText)
+        }
+        val english = tracks.filter { it.codec == EmbeddedTextCodec.Pgs && isEnglishPgs(it) }
+        val pgsSource = english.ifEmpty { tracks.filter { it.codec == EmbeddedTextCodec.Pgs } }
+        val timedPgs = pgsSource.flatMap { track ->
+            val starts = cueStartList(refs, track.trackNumber, scale)
+            listOf(0, 1).map { phase ->
+                track.copy(
+                    name = listOfNotNull(track.name, "p$phase").joinToString(" "),
+                    cues = pgsPhaseCues(starts, phase),
+                    estimatedCueEnds = false,
+                )
+            }
+        }
+        return DialogueTimingIndex(tracks = timedPgs)
     }
 
     private suspend fun loadMp4DialogueTiming(
@@ -586,6 +593,48 @@ internal object EmbeddedSubtitleExtractor {
             return DialogueTimingIndex(hasEmbeddedSpanish = true, tracks = tracks)
         }
         return DialogueTimingIndex(tracks = tracks)
+    }
+
+    private fun cueStartList(refs: List<MkvCueRef>, trackNumber: Long, scale: Long): List<Long> =
+        refs.filter { it.trackNumber == trackNumber }
+            .map { it.timeTicks * scale / 1_000_000L }
+            .sorted()
+            .distinct()
+
+    private fun cueStartsToTimeline(
+        refs: List<MkvCueRef>,
+        trackNumber: Long,
+        scale: Long,
+    ): List<EmbeddedSubtitleCue> {
+        val starts = cueStartList(refs, trackNumber, scale)
+        return starts.mapIndexed { index, start ->
+            val next = starts.getOrNull(index + 1)
+            val end = if (next == null) start + 2_000L else minOf(next, start + 4_000L)
+            EmbeddedSubtitleCue(start, end.coerceAtLeast(start + 1L), "")
+        }
+    }
+
+    private fun pgsPhaseCues(starts: List<Long>, phase: Int): List<EmbeddedSubtitleCue> {
+        val cues = ArrayList<EmbeddedSubtitleCue>()
+        var index = phase
+        while (index < starts.size) {
+            val start = starts[index]
+            val next = starts.getOrNull(index + 1)
+            val gap = next?.minus(start)
+            val end = if (next != null && gap != null && gap in 200L..8_000L) {
+                next
+            } else {
+                start + (gap?.coerceIn(1L, 4_000L) ?: 2_000L)
+            }
+            cues += EmbeddedSubtitleCue(start, end.coerceAtLeast(start + 1L), "")
+            index += 2
+        }
+        return cues
+    }
+
+    private fun isEnglishPgs(track: EmbeddedTextTrack): Boolean {
+        val language = track.language?.trim()?.lowercase().orEmpty()
+        return language == "en" || language == "eng" || language.startsWith("en-")
     }
 
     private fun looksLikeMkv(data: ByteArray): Boolean =

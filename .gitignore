@@ -1,4 +1,6 @@
 *.iml
+composeApp/libs/sherpa-onnx-*.aar
+composeApp/libs/sherpa-onnx-*.aar.part
 .cursor/*
 !.cursor/skills/
 !.cursor/skills/**

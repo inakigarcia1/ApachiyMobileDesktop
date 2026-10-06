@@ -374,14 +374,29 @@ internal object AutoSyncTimelineRetimer {
         val activityMarginAccepted =
             candidateActivityMargin >= requiredActivityMargin ||
                 (delayOnly && allowAmbiguousDelayOnlyMargin)
+        val activityAccepted =
+            candidateActivityScore >= requiredActivityScore && activityMarginAccepted
+        // PGS cue-index activity is a weak corridor (AoT S4E5: score 0.37, margin 0.004)
+        // even when the DP then locks the same offset (coverage 0.96, cost 1.14, skip run 1).
+        val structuralLock =
+            candidateActivityScore < requiredActivityScore &&
+                result.confident &&
+                result.targetCoverage >= 0.94 &&
+                result.referenceCoverage >= 0.90 &&
+                result.averageGroupCost <= 1.25 &&
+                result.longestTargetSkipRun <= 2 &&
+                coverageSegments >= requiredCoverageSegments &&
+                simpleRatio >= DISCOVERED_MIN_SIMPLE_GROUP_RATIO
 
         val confirmed =
             result.confident &&
-                candidateActivityScore >= requiredActivityScore &&
-                activityMarginAccepted &&
+                (activityAccepted || structuralLock) &&
                 coverageSegments >= requiredCoverageSegments &&
                 result.targetCoverage >= DISCOVERED_MIN_TARGET_COVERAGE &&
-                result.averageGroupCost <= DISCOVERED_MAX_AVERAGE_GROUP_COST &&
+                (
+                    result.averageGroupCost <= DISCOVERED_MAX_AVERAGE_GROUP_COST ||
+                        structuralLock
+                    ) &&
                 result.longestTargetSkipRun <= MAX_LONGEST_TARGET_SKIP_RUN &&
                 simpleRatio >= DISCOVERED_MIN_SIMPLE_GROUP_RATIO
 

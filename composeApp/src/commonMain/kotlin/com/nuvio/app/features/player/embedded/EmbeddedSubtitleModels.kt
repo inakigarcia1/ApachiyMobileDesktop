@@ -22,6 +22,7 @@ enum class EmbeddedTextCodec {
     Ass,
     Ssa,
     WebVtt,
+    Pgs,
 }
 
 data class EmbeddedSubtitleReference(

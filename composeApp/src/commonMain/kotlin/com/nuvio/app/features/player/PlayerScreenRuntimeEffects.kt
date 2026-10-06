@@ -44,6 +44,18 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         onDispose { PlaybackActiveGuard.isPlaybackActive = false }
     }
 
+    LaunchedEffect(Unit) {
+        SubtitleSyncStatus.switchRequests.collect { request ->
+            val url = request?.url ?: return@collect
+            if (isUserExplicitSubtitleSelection) return@collect
+            val addon = addonSubtitles.firstOrNull { it.url == url } ?: return@collect
+            selectedAddonSubtitleId = addon.id
+            selectedSubtitleIndex = -1
+            useCustomSubtitles = true
+            appliedAddonSubtitleUrl = url
+        }
+    }
+
     if (AgentQa.enabled) {
         LaunchedEffect(Unit) {
             while (true) {

@@ -97,6 +97,10 @@ android {
         }
         jniLibs {
             useLegacyPackaging = true
+            excludes += listOf(
+                "**/libsherpa-onnx-c-api.so",
+                "**/libsherpa-onnx-cxx-api.so",
+            )
             pickFirsts += listOf(
                 "lib/*/libc++_shared.so",
                 "lib/*/libavcodec.so",

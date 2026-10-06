@@ -230,9 +230,18 @@ internal fun PlayerScreenRuntime.refreshTracks() {
         if (audioTracks.isEmpty()) {
             return
         }
+        val supportedAudio = deviceSupportedAudioCodecs()
+        if (originalAudioHasNoPlayableTrack(audioTracks, supportedAudio) &&
+            unsupportedAudioCheckedUrl != activeSourceUrl
+        ) {
+            unsupportedAudioCheckedUrl = activeSourceUrl
+            tryNextCompatibleSource("audio")
+            return
+        }
         val preferredAudioIndex = findPreferredOriginalAudioTrackIndex(
             tracks = audioTracks,
             contentOriginalLanguage = contentOriginalLanguage,
+            supportedAudioCodecs = supportedAudio,
         )
         if (preferredAudioIndex >= 0 && preferredAudioIndex != selectedAudioIndex) {
             playerController?.selectAudioTrack(preferredAudioIndex)

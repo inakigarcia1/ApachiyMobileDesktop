@@ -2,6 +2,7 @@ package com.nuvio.app.core.auth
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.device.ApachiyDeviceApi
+import com.nuvio.app.core.diagnostics.reportUnexpectedSignOut
 import com.nuvio.app.core.network.ApachiyConfig
 import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.network.SupabaseProvider
@@ -26,6 +27,8 @@ import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.getString
 
 object AuthRepository {
+    private const val REFRESH_LEAD_MS = 10 * 60 * 1000L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Logger.withTag("AuthRepository")
 
@@ -81,6 +84,30 @@ object AuthRepository {
                         }
                     }
                 }
+            }
+        }
+        scope.launch { keepSessionFresh() }
+    }
+
+    private suspend fun keepSessionFresh() {
+        while (true) {
+            val session = SupabaseProvider.client.auth.currentSessionOrNull()
+            val refreshToken = session?.refreshToken?.takeIf { it.isNotBlank() }
+            if (session == null || refreshToken == null) {
+                delay(30_000)
+                continue
+            }
+            val expiresAtMs = session.expiresAt?.toEpochMilliseconds() ?: 0L
+            val waitMs = expiresAtMs - REFRESH_LEAD_MS - System.currentTimeMillis()
+            if (waitMs > 0) {
+                delay(waitMs)
+                continue
+            }
+            val refreshed = refreshCurrentSession()
+            if (!refreshed && _state.value is AuthState.Unauthenticated) {
+                // Definitive invalid session; refreshCurrentSession already cleared local auth.
+            } else if (!refreshed) {
+                delay(60_000)
             }
         }
     }
@@ -222,8 +249,11 @@ object AuthRepository {
         }
     }
 
-    suspend fun signOut(): Result<Unit> {
+    suspend fun signOut(explicit: Boolean = true, reason: String = "user_requested"): Result<Unit> {
         _error.value = null
+        if (!explicit) {
+            reportUnexpectedSignOut(reason)
+        }
         lastAuthKind = LastAuthKind.None
         val anonymousRead = runCatching { AuthStorage.loadAnonymousUserId() }
         val wasAnonymous = anonymousRead.getOrNull() != null
@@ -300,7 +330,8 @@ object AuthRepository {
         return true
     }
 
-    private suspend fun clearLocalSessionAfterRemoteInvalidation() {
+    private suspend fun clearLocalSessionAfterRemoteInvalidation(reason: String = "remote_invalidation") {
+        reportUnexpectedSignOut(reason)
         _error.value = null
         AuthStorage.clearAnonymousUserId()
         validatedRemoteUserId = null

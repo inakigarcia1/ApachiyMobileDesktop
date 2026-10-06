@@ -98,23 +98,79 @@ internal fun isLikelyLocalizedDubAudio(track: AudioTrack): Boolean {
     return Regex("""\bvo\b""").containsMatchIn(text)
 }
 
-internal fun originalAudioPresentationScore(track: AudioTrack): Int {
-    val text = (track.label ?: "").lowercase()
-    var score = 0
-    if ("atmos" in text || "truehd" in text) score += 40
-    if ("dts-hd" in text || "dts hd" in text) score += 30
-    if ("flac" in text) score += 15
-    if ("compatibility" in text) score -= 20
-    if (isLikelyLocalizedDubAudio(track)) score -= 200
-    return score
+// ponytail: static list from composeApp/libs FFmpeg AAR decoders; update if the AAR changes.
+private val SOFTWARE_AUDIO_CODECS = setOf(
+    "aac", "mp3", "opus", "vorbis", "flac", "ac3", "eac3", "dts", "truehd",
+)
+
+internal fun withSoftwareAudioCodecs(deviceSupported: Set<String>): Set<String> =
+    deviceSupported + SOFTWARE_AUDIO_CODECS
+
+internal fun deviceSupportedAudioCodecs(): Set<String>? {
+    val audio = com.nuvio.app.features.addons.PlaybackCapabilitiesProvider.snapshot()?.audio ?: return null
+    if (audio.isEmpty()) return null
+    return withSoftwareAudioCodecs(
+        audio.filterValues { it }.keys.map { it.lowercase() }.toSet(),
+    )
+}
+
+internal fun audioCodecKeyFromLabel(label: String?): String? {
+    val text = label.orEmpty().lowercase()
+    return when {
+        "truehd" in text || "true hd" in text || "mlp" in text -> "truehd"
+        "atmos" in text -> "atmos"
+        "dts-hd" in text || "dts hd" in text || "dtshd" in text -> "dtshd"
+        "dts:x" in text || "dtsx" in text -> "dtsx"
+        "e-ac-3" in text || "eac3" in text || "ec-3" in text || "dd+" in text -> "eac3"
+        "ac-3" in text || "ac3" in text || "dolby digital" in text -> "ac3"
+        "flac" in text -> "flac"
+        "opus" in text -> "opus"
+        "vorbis" in text -> "vorbis"
+        "aac" in text -> "aac"
+        "mp3" in text -> "mp3"
+        "dts" in text -> "dts"
+        else -> null
+    }
+}
+
+private val GENERIC_AUDIO_COMPATIBILITY = listOf(
+    "aac", "mp3", "opus", "vorbis", "ac3", "eac3", "flac", "dts", "dtsx", "dtshd", "truehd", "atmos",
+)
+
+internal fun audioTrackKnownIncompatible(track: AudioTrack, supportedAudioCodecs: Set<String>?): Boolean {
+    if (supportedAudioCodecs == null) return false
+    val key = audioCodecKeyFromLabel(track.label) ?: return false
+    return key !in supportedAudioCodecs
+}
+
+internal fun originalAudioHasNoPlayableTrack(
+    tracks: List<AudioTrack>,
+    supportedAudioCodecs: Set<String>?,
+): Boolean {
+    if (supportedAudioCodecs == null || tracks.isEmpty()) return false
+    val pool = tracks.filter { !isUndesirableAudioTrack(it) }.ifEmpty { tracks }
+    return pool.all { audioTrackKnownIncompatible(it, supportedAudioCodecs) }
+}
+
+private fun genericAudioCompatibilityRank(track: AudioTrack): Int {
+    val key = audioCodecKeyFromLabel(track.label) ?: return GENERIC_AUDIO_COMPATIBILITY.size
+    val index = GENERIC_AUDIO_COMPATIBILITY.indexOf(key)
+    return if (index >= 0) index else GENERIC_AUDIO_COMPATIBILITY.size
 }
 
 internal fun findPreferredOriginalAudioTrackIndex(
     tracks: List<AudioTrack>,
     contentOriginalLanguage: String?,
+    supportedAudioCodecs: Set<String>? = null,
 ): Int {
     val eligible = tracks.filter { !isUndesirableAudioTrack(it) }
     if (eligible.isEmpty()) return -1
+    val playable = if (supportedAudioCodecs == null) {
+        eligible
+    } else {
+        eligible.filter { !audioTrackKnownIncompatible(it, supportedAudioCodecs) }
+    }
+    if (playable.isEmpty()) return -1
 
     val originalTargets = resolvePreferredAudioLanguageTargets(
         preferredAudioLanguage = AudioLanguageOption.ORIGINAL,
@@ -123,7 +179,7 @@ internal fun findPreferredOriginalAudioTrackIndex(
         contentOriginalLanguage = contentOriginalLanguage,
     )
     val languagePool = if (originalTargets.isNotEmpty()) {
-        eligible.filter { track ->
+        playable.filter { track ->
             originalTargets.any { target ->
                 languageMatchesPreference(
                     trackLanguage = resolveAudioTrackLanguageTarget(track),
@@ -136,10 +192,10 @@ internal fun findPreferredOriginalAudioTrackIndex(
     }
     val pool = when {
         languagePool.isNotEmpty() -> languagePool
-        else -> eligible.filter { !isLikelyLocalizedDubAudio(it) }
+        else -> playable.filter { !isLikelyLocalizedDubAudio(it) }.ifEmpty { playable }
     }
-    val best = pool.maxWithOrNull(
-        compareBy<AudioTrack>({ originalAudioPresentationScore(it) }, { -it.index }),
+    val best = pool.minWithOrNull(
+        compareBy<AudioTrack>({ genericAudioCompatibilityRank(it) }, { it.index }),
     ) ?: return -1
     return tracks.indexOfFirst { it.index == best.index }
 }

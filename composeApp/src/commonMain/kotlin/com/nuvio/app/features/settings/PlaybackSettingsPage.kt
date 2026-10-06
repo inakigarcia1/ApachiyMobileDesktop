@@ -1,6 +1,9 @@
 package com.nuvio.app.features.settings
 
 import com.nuvio.app.core.build.ApachiyProductSettings
+import com.nuvio.app.features.autosync.bubble.AutoSyncBubbleToasts
+import com.nuvio.app.features.player.AudioSyncSettings
+import com.nuvio.app.features.player.SubtitleSyncStatus
 import com.nuvio.app.core.build.AppFeaturePolicy
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -357,6 +360,10 @@ private fun PlaybackSettingsSection(
     val autoSyncToleranceMs by remember {
         AutoSyncPreferencesRepository.syncToleranceMs
     }.collectAsStateWithLifecycle()
+    val audioSyncFallback by AudioSyncSettings.fallbackEnabled.collectAsStateWithLifecycle()
+    val audioSyncSampling by AudioSyncSettings.samplingOnMobileData.collectAsStateWithLifecycle()
+    val audioSyncBubble by AutoSyncBubbleToasts.enabled.collectAsStateWithLifecycle()
+    val speechModel by SubtitleSyncStatus.speechModel.collectAsStateWithLifecycle()
     val subtitleLanguageChosen = isChosenSubtitleLanguage(preferredSubtitleLanguage)
     val autoSyncShownOn = autoSyncOnStart && subtitleLanguageChosen
 
@@ -551,6 +558,62 @@ private fun PlaybackSettingsSection(
                             AutoSyncPreferencesRepository.setSyncToleranceMs(next)
                         },
                     )
+                    if (!isDesktop && !isIos) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.settings_playback_audio_sync_fallback),
+                            description = stringResource(Res.string.settings_playback_audio_sync_fallback_description),
+                            checked = audioSyncFallback,
+                            enabled = subtitleLanguageEnabled,
+                            isTablet = isTablet,
+                            onCheckedChange = AudioSyncSettings::setFallbackEnabled,
+                        )
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.settings_playback_audio_sync_mobile_data),
+                            description = stringResource(Res.string.settings_playback_audio_sync_mobile_data_description),
+                            checked = audioSyncSampling,
+                            enabled = subtitleLanguageEnabled && audioSyncFallback,
+                            isTablet = isTablet,
+                            onCheckedChange = AudioSyncSettings::setSamplingOnMobileData,
+                        )
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.settings_autosync_bubble_toast),
+                            description = stringResource(Res.string.settings_autosync_bubble_toast_description),
+                            checked = audioSyncBubble,
+                            isTablet = isTablet,
+                            onCheckedChange = AutoSyncBubbleToasts::setEnabled,
+                        )
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(
+                                Res.string.settings_playback_speech_model,
+                                speechModel.sizeMb,
+                            ),
+                            description = when {
+                                speechModel.downloading -> stringResource(
+                                    Res.string.settings_playback_speech_model_downloading,
+                                    (speechModel.progress * 100).toInt(),
+                                )
+                                speechModel.downloaded -> stringResource(Res.string.settings_playback_speech_model_ready)
+                                speechModel.error != null -> stringResource(
+                                    Res.string.settings_playback_speech_model_failed,
+                                    speechModel.error.orEmpty(),
+                                )
+                                else -> stringResource(Res.string.settings_playback_speech_model_missing)
+                            },
+                            enabled = subtitleLanguageEnabled && !speechModel.downloading,
+                            isTablet = isTablet,
+                            onClick = {
+                                if (speechModel.downloaded) {
+                                    SubtitleSyncStatus.modelActions?.delete()
+                                } else {
+                                    SubtitleSyncStatus.modelActions?.download()
+                                }
+                            },
+                        )
+                    }
                 }
                 SettingsGroupDivider(isTablet = isTablet)
                 SettingsNavigationRow(

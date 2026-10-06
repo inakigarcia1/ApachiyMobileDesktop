@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_audio_sync_model_downloading">Descargando el modelo de reconocimiento (%1$s MB) para sincronizar más rápido…</string>
+    <string name="player_audio_sync_model_needs_wifi">Conectate a Wi-Fi una vez para bajar el modelo de %1$s MB y sincronizar más rápido</string>
+    <string name="player_audio_sync_live_only">Este dispositivo no puede adelantar el audio %1$s: sincroniza con lo que se está oyendo</string>
+    <string name="player_audio_sync_withdrawn">No se pudo confirmar la sincronización, volvió el tiempo original</string>
+    <string name="player_audio_sync_estimated">Sincronizando subtítulos con el audio (%1$s)…</string>
+    <string name="player_audio_sync_synced">Sincronización confirmada (%1$s)</string>
+    <string name="player_audio_sync_synced_rate">Sincronización confirmada (%1$s, cadencia corregida)</string>
+    <string name="player_audio_sync_adjusted">Cambió el tiempo del subtítulo, se volvió a sincronizar (%1$s)</string>
+    <string name="settings_playback_audio_sync_fallback">Sincronizar con el audio si AutoSync no puede</string>
+    <string name="settings_playback_audio_sync_fallback_description">Si no hay subtítulos embebidos o el match es flojo, alinea el subtítulo escuchando el audio</string>
+    <string name="settings_playback_speech_model">Modelo de reconocimiento (%1$s MB)</string>
+    <string name="settings_playback_speech_model_missing">No está descargado. Tocá para bajarlo y sincronizar más rápido el audio en inglés</string>
+    <string name="settings_playback_speech_model_downloading">Descargando… %1$s%%</string>
+    <string name="settings_playback_speech_model_ready">Descargado. Tocá para borrarlo</string>
+    <string name="settings_playback_speech_model_failed">Falló la descarga (%1$s). Tocá para reintentar</string>
+    <string name="settings_playback_audio_sync_mobile_data">Muestrear en datos móviles</string>
+    <string name="settings_playback_audio_sync_show_statistics">Mostrar estadísticas de AudioSync</string>
+    <string name="settings_playback_audio_sync_show_statistics_description">Muestra qué está haciendo la sincronización por audio en el reproductor</string>
+    <string name="settings_playback_audio_sync_mobile_data_description">Lee tramos cortos de la película por delante. Usa hasta 150 MB por título</string>
+    <string name="settings_playback_audio_sync_share_log">Compartir registro de audio sync</string>
+    <string name="settings_playback_audio_sync_share_log_description">Tiempos y decisiones de las últimas sincronizaciones, para reportar un problema</string>
+    <string name="audio_sync_speech_model_offer_title">¿Bajar el modelo de reconocimiento?</string>
+    <string name="audio_sync_speech_model_offer_body">Si no hay subtítulos embebidos o el match de AutoSync es flojo, se puede alinear escuchando el diálogo. El modelo pesa %1$s MB y se baja una sola vez.</string>
+    <string name="audio_sync_speech_model_offer_later">Ahora no</string>
+    <string name="audio_sync_speech_model_offer_download">Descargar</string>
+    <string name="settings_autosync_bubble_toast">Aviso de vidrio</string>
+    <string name="settings_autosync_bubble_toast_description">Muestra el progreso de la sincronización sobre el video</string>
+</resources>

@@ -46,6 +46,8 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             sourceHeaders = headers,
             subtitleUrl = subtitleUrl,
             subtitleHeaders = headers,
+            userChoseSubtitle = isUserExplicitSubtitleSelection,
+            isStillSelected = { appliedAddonSubtitleUrl == subtitleUrl && useCustomSubtitles },
         ) == true
     ) {
         return

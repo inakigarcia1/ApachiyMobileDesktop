@@ -66,6 +66,11 @@ fun EmbeddedTextTrack.toReference(): EmbeddedSubtitleReference {
         EmbeddedTextCodec.Ass, EmbeddedTextCodec.Ssa -> assBody() to "embedded.${if (codec == EmbeddedTextCodec.Ssa) "ssa" else "ass"}"
         EmbeddedTextCodec.WebVtt -> toWebVtt() to "embedded.vtt"
         EmbeddedTextCodec.SubRip -> toSrt() to "embedded.srt"
+        EmbeddedTextCodec.Pgs -> return EmbeddedSubtitleReference(
+            bytes = ByteArray(0),
+            filename = "embedded.pgs",
+            language = language,
+        )
     }
     return EmbeddedSubtitleReference(
         bytes = body.encodeToByteArray(),

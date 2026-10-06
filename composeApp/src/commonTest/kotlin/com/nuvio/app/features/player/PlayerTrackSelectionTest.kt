@@ -364,7 +364,7 @@ class PlayerTrackSelectionTest {
     }
 
     @Test
-    fun originalAudioPrefersFeatureMixOverDubsAndCommentaryWhenLanguageIsUnknown() {
+    fun originalAudioPrefersWidelyPlayableCodecOverTrueHd() {
         val tracks = listOf(
             AudioTrack(index = 0, id = "0", label = "DUB (5.1(side), E-AC-3)", language = "ru"),
             AudioTrack(index = 1, id = "1", label = "MVO (Jaskier) (unknown8, DTS)", language = "ru"),
@@ -375,8 +375,8 @@ class PlayerTrackSelectionTest {
 
         val unknown = findPreferredOriginalAudioTrackIndex(tracks, contentOriginalLanguage = null)
         val english = findPreferredOriginalAudioTrackIndex(tracks, contentOriginalLanguage = "en")
-        assertEquals("Dolby Atmos/TrueHD Audio / 7.1-Atmos", tracks[unknown].label)
-        assertEquals("Dolby Atmos/TrueHD Audio / 7.1-Atmos", tracks[english].label)
+        assertEquals("Compatibility Track / Dolby Digital Audio", tracks[unknown].label)
+        assertEquals("Compatibility Track / Dolby Digital Audio", tracks[english].label)
     }
 
     @Test
@@ -388,6 +388,27 @@ class PlayerTrackSelectionTest {
         )
 
         assertEquals(2, findPreferredOriginalAudioTrackIndex(tracks, contentOriginalLanguage = "fr"))
+    }
+
+    @Test
+    fun originalJapaneseAudioSkipsUnsupportedEnglishTrueHd() {
+        val tracks = listOf(
+            AudioTrack(index = 0, id = "0", label = "TrueHD 5.1", language = "en"),
+            AudioTrack(index = 1, id = "1", label = "FLAC 2.0", language = "ja"),
+            AudioTrack(index = 2, id = "2", label = "AC-3 5.1", language = "en"),
+        )
+        val supported = setOf("aac", "ac3", "flac")
+        assertEquals(
+            1,
+            findPreferredOriginalAudioTrackIndex(tracks, "ja", supported),
+        )
+        assertEquals(
+            true,
+            originalAudioHasNoPlayableTrack(
+                listOf(AudioTrack(index = 0, id = "0", label = "TrueHD 5.1", language = "ja")),
+                supported,
+            ),
+        )
     }
 
     private fun audioTrack(language: String?) = AudioTrack(

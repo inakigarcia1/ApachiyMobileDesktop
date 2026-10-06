@@ -1,6 +1,7 @@
 package com.nuvio.app.features.autosync
 
 import com.nuvio.app.features.player.SubtitleSyncCue
+import com.nuvio.app.features.player.embedded.EmbeddedTextCodec
 import com.nuvio.app.features.player.embedded.EmbeddedTextTrack
 import com.nuvio.app.features.player.embedded.hasEmbeddedSpanishTextTrack
 
@@ -10,10 +11,15 @@ internal object AutoSyncSelectedRun {
         target: List<SubtitleSyncCue>,
     ): AutoSyncTimelineRetimeResult? {
         if (target.size < 4) return null
-        val primary = references.filter { track ->
+        val usable = if (references.any { it.codec != EmbeddedTextCodec.Pgs }) {
+            references.filter { it.codec != EmbeddedTextCodec.Pgs }
+        } else {
+            references
+        }
+        val primary = usable.filter { track ->
             !hasEmbeddedSpanishTextTrack(listOf(track)) && isFullDialogue(track) && !track.forced
         }
-        val forced = references.filter { track ->
+        val forced = usable.filter { track ->
             !hasEmbeddedSpanishTextTrack(listOf(track)) && isFullDialogue(track) && track.forced
         }
         return firstConfident(primary, target) ?: firstConfident(forced, target)

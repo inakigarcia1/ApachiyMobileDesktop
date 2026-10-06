@@ -28,6 +28,7 @@ import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.auth.DeviceSessionRegistration
 import com.nuvio.app.core.auth.RemoteLogoutWatcher
+import com.nuvio.app.core.player.ActivePlayback
 import com.nuvio.app.core.device.DeviceRegistrar
 import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.network.NetworkStatusRepository
@@ -402,6 +403,7 @@ internal fun AppGate(
                         enterProfileGate(cachedProfiles, syncOnEnter = false)
                     }
                 } else {
+                    ActivePlayback.stop()
                     ProfileRepository.clearInMemory()
                     profileSelectionLoading = false
                     profileSelectionTransitionActive = false

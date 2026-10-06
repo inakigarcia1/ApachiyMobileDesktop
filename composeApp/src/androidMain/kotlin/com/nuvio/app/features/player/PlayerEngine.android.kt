@@ -69,6 +69,7 @@ import com.nuvio.app.core.diagnostics.PlaybackFailureDetails
 import com.nuvio.app.core.diagnostics.PlaybackFailureNotes
 import com.nuvio.app.features.autosync.AutoSyncCandidateScope
 import com.nuvio.app.features.autosync.AutoSyncExtractorsFactory
+import com.nuvio.app.core.player.ActivePlayback
 import com.nuvio.app.features.autosync.AutoSyncPlayerCoordinator
 import com.nuvio.app.features.streams.normalizeStreamType
 import `is`.xyz.mpv.BaseMPVView
@@ -517,19 +518,30 @@ private fun ExoPlayerSurface(
             getSubtitleDelayMs = { latestSubtitleDelayMs.value },
         )
     }
-    val autoSyncCoordinator = remember(exoPlayer, sidecarController, sourceUrl) {
+    val autoSyncCoordinator = remember(exoPlayer, sidecarController, sourceUrl, sourceAudioUrl, dataSourceFactory) {
         AutoSyncPlayerCoordinator(
             context = context,
             scope = coroutineScope,
             player = exoPlayer,
             sidecar = sidecarController,
             sourceUrl = sourceUrl,
+            sourceAudioUrl = sourceAudioUrl,
+            dataSourceFactory = dataSourceFactory,
             sourceHeaders = sanitizedSourceHeaders,
             getSubtitleHeaders = { sanitizedSourceHeaders },
             getUseLibass = { useLibass },
             onMimeTypeSelected = { mime -> selectedExternalSubtitleMimeType = mime },
             onSubtitleDelayChanged = { delay -> subtitleDelayMs = delay },
         )
+    }
+
+    DisposableEffect(exoPlayer, autoSyncCoordinator) {
+        val unregister = ActivePlayback.register {
+            autoSyncCoordinator.cancel()
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+        }
+        onDispose { unregister() }
     }
 
     fun syncPlayerViewKeepScreenOn() {
@@ -934,6 +946,7 @@ private fun ExoPlayerSurface(
 
                 override fun clearExternalSubtitle() {
                     Log.d(TAG, "clearExternalSubtitle called")
+                    autoSyncCoordinator.cancel()
                     subtitleSelectionJob?.cancel()
                     sidecarController.stopSidecarAddonSubtitle(clearView = true)
                     selectedExternalSubtitleMimeType = null
@@ -956,6 +969,7 @@ private fun ExoPlayerSurface(
 
                 override fun clearExternalSubtitleAndSelect(trackIndex: Int) {
                     Log.d(TAG, "clearExternalSubtitleAndSelect: trackIndex=$trackIndex")
+                    autoSyncCoordinator.cancel()
                     subtitleSelectionJob?.cancel()
                     sidecarController.stopSidecarAddonSubtitle(clearView = true)
                     selectedExternalSubtitleMimeType = null
@@ -1010,11 +1024,24 @@ private fun ExoPlayerSurface(
                     sourceHeaders: Map<String, String>,
                     subtitleUrl: String,
                     subtitleHeaders: Map<String, String>,
+                    userChoseSubtitle: Boolean,
+                    isStillSelected: () -> Boolean,
                 ): Boolean {
+                    autoSyncCoordinator.setCandidates(
+                        externalSubtitles.map { subtitle ->
+                            com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate(
+                                url = subtitle.url,
+                                language = subtitle.language,
+                                name = subtitle.name,
+                            )
+                        },
+                    )
                     autoSyncCoordinator.start(
                         url = subtitleUrl,
                         candidateScope = AutoSyncCandidateScope.SELECTED_ONLY,
                         fallbackAttach = { fallbackUrl -> setSubtitleUri(fallbackUrl) },
+                        userChoseSubtitle = userChoseSubtitle,
+                        isStillSelected = isStillSelected,
                     )
                     return true
                 }
@@ -2315,6 +2342,15 @@ private class SubtitleOffsetRenderersFactory(
                 subtitleDelayUsProvider = subtitleDelayUsProvider,
             )
         }
+    }
+
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean,
+    ): androidx.media3.exoplayer.audio.AudioSink? {
+        return super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
+            ?.let(com.nuvio.app.features.player.audiosync.AudioSyncTaps::wrapAudioSink)
     }
 }
 
