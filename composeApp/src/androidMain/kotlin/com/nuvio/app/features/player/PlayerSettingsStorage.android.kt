@@ -71,7 +71,7 @@ actual object PlayerSettingsStorage {
     private const val streamAutoPlayPreferBingeGroupKey = "stream_auto_play_prefer_binge_group"
     private const val streamAutoPlayReuseBingeGroupKey = "stream_auto_play_reuse_binge_group"
     private const val nextEpisodeThresholdModeKey = "next_episode_threshold_mode"
-    private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v2"
+    private const val nextEpisodeThresholdPercentKey = "next_episode_threshold_percent_v3"
     private const val nextEpisodeThresholdMinutesBeforeEndKey = "next_episode_threshold_minutes_before_end_v2"
     private const val useLibassKey = "use_libass"
     private const val libassRenderTypeKey = "libass_render_type"
@@ -961,7 +961,7 @@ actual object PlayerSettingsStorage {
         preferences?.let { sharedPreferences ->
             val key = ProfileScopedKey.of(nextEpisodeThresholdPercentKey)
             if (sharedPreferences.contains(key)) {
-                sharedPreferences.getFloat(key, 99f)
+                sharedPreferences.getFloat(key, 90f)
             } else {
                 null
             }

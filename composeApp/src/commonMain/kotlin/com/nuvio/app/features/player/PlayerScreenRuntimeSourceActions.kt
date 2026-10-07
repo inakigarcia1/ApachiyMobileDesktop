@@ -437,6 +437,7 @@ private data class EpisodeResume(val positionMs: Long, val fraction: Float?)
 
 private fun PlayerScreenRuntime.resetEpisodePanelAndNextEpisodeState() {
     showNextEpisodeCard = false
+    preloadedNextEpisodeVideoId = null
     showSourcesPanel = false
     showEpisodesPanel = false
     episodeStreamsPanelState = EpisodeStreamsPanelState()

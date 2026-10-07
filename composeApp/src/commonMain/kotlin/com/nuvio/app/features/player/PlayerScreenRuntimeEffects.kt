@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.nuvio.app.features.details.MetaDetailsRepository
+import com.nuvio.app.features.downloads.DownloadsRepository
 import com.nuvio.app.features.network.PlaybackActiveGuard
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamRequest
@@ -82,7 +83,8 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
 
     LaunchedEffect(parentMetaType, parentMetaId, playerController, playbackSnapshot.isLoading) {
         if (parentMetaId.isBlank()) return@LaunchedEffect
-        if (resolvePlaybackContentOriginalLanguage() != null) return@LaunchedEffect
+        val existingOriginal = resolvePlaybackContentOriginalLanguage()
+        if (existingOriginal != null) return@LaunchedEffect
         val resolved = ensurePlaybackContentOriginalLanguageResolved() ?: return@LaunchedEffect
         preferredAudioSelectionApplied = false
         if (playerController != null && !playbackSnapshot.isLoading) {
@@ -277,6 +279,13 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         val controller = playerController ?: return@LaunchedEffect
         if (playerControllerSourceUrl != activeSourceUrl) return@LaunchedEffect
         controller.updateNowPlayingMetadata(buildNowPlayingInfo())
+    }
+
+    LaunchedEffect(playerController, activeAddonSubtitleType, activeVideoId) {
+        val controller = playerController ?: return@LaunchedEffect
+        val type = activeAddonSubtitleType.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val videoId = activeVideoId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        controller.setAudioSyncContent(type, videoId)
     }
 
     LaunchedEffect(
@@ -556,6 +565,7 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         autoSkippedIntervalKeys.clear()
         playerNotificationMessage = ""
         showNextEpisodeCard = false
+        preloadedNextEpisodeVideoId = null
         nextEpisodeAutoPlayJob?.cancel()
         nextEpisodeAutoPlaySearching = false
 
@@ -711,11 +721,51 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         playbackSnapshot.isLoading,
         nextEpisodeInfo,
         skipIntervals,
+        episodeStreamsPanelState.showStreams,
+        episodeStreamsPanelState.selectedEpisode?.id,
         playerSettingsUiState.nextEpisodeThresholdMode,
         playerSettingsUiState.nextEpisodeThresholdPercent,
         playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
     ) {
-        if (nextEpisodeInfo == null || playbackSnapshot.durationMs <= 0L || playbackSnapshot.isLoading) {
+        val upcoming = nextEpisodeInfo
+        val durationMs = playbackSnapshot.durationMs
+        if (
+            upcoming != null &&
+            upcoming.hasAired &&
+            durationMs > 0L &&
+            preloadedNextEpisodeVideoId != upcoming.videoId &&
+            PlayerNextEpisodeRules.shouldPreloadNextEpisodeSources(
+                positionMs = playbackSnapshot.positionMs,
+                durationMs = durationMs,
+                skipIntervals = skipIntervals,
+                thresholdMode = playerSettingsUiState.nextEpisodeThresholdMode,
+                thresholdPercent = playerSettingsUiState.nextEpisodeThresholdPercent,
+                thresholdMinutesBeforeEnd = playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+            )
+        ) {
+            val panelBlocksPreload = episodeStreamsPanelState.showStreams &&
+                episodeStreamsPanelState.selectedEpisode?.id != upcoming.videoId
+            if (!panelBlocksPreload) {
+                preloadedNextEpisodeVideoId = upcoming.videoId
+                val downloaded = DownloadsRepository.findPlayableDownload(
+                    parentMetaId = parentMetaId,
+                    seasonNumber = upcoming.season,
+                    episodeNumber = upcoming.episode,
+                    videoId = upcoming.videoId,
+                )
+                if (downloaded == null) {
+                    val nextVideo = playerMetaVideos.firstOrNull { it.id == upcoming.videoId }
+                    PlayerStreamsRepository.loadEpisodeStreams(
+                        type = contentType ?: parentMetaType,
+                        videoId = upcoming.videoId,
+                        season = upcoming.season,
+                        episode = upcoming.episode,
+                        runtimeMinutes = nextVideo?.runtime,
+                    )
+                }
+            }
+        }
+        if (upcoming == null || durationMs <= 0L || playbackSnapshot.isLoading) {
             showNextEpisodeCard = false
             return@LaunchedEffect
         }

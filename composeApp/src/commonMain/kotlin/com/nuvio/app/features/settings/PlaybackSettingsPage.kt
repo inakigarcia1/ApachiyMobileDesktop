@@ -1345,8 +1345,8 @@ private fun PlaybackSettingsSection(
                                 onValueChangeFinished = {
                                     PlayerSettingsRepository.setNextEpisodeThresholdPercent(sliderValue)
                                 },
-                                valueRange = 97f..100f,
-                                steps = calculateSteps(97f, 100f, 0.5f),
+                                valueRange = 85f..100f,
+                                steps = calculateSteps(85f, 100f, 0.5f),
                                 colors = SliderDefaults.colors(
                                     thumbColor = MaterialTheme.colorScheme.primary,
                                     activeTrackColor = MaterialTheme.colorScheme.primary,
