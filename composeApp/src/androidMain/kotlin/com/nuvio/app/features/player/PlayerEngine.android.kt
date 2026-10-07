@@ -1019,6 +1019,10 @@ private fun ExoPlayerSurface(
                     subtitleDelayMs = delayMs.coerceIn(SUBTITLE_DELAY_MIN_MS, SUBTITLE_DELAY_MAX_MS)
                 }
 
+                override fun setAudioSyncContent(type: String, videoId: String) {
+                    autoSyncCoordinator.setAudioSyncContent(type, videoId)
+                }
+
                 override fun runSelectedAutoSync(
                     sourceUrl: String,
                     sourceHeaders: Map<String, String>,
@@ -1038,7 +1042,7 @@ private fun ExoPlayerSurface(
                     )
                     autoSyncCoordinator.start(
                         url = subtitleUrl,
-                        candidateScope = AutoSyncCandidateScope.SELECTED_ONLY,
+                        candidateScope = AutoSyncCandidateScope.STARTUP_SEARCH,
                         fallbackAttach = { fallbackUrl -> setSubtitleUri(fallbackUrl) },
                         userChoseSubtitle = userChoseSubtitle,
                         isStillSelected = isStillSelected,

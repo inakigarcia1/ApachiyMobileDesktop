@@ -33,6 +33,9 @@ interface PlayerEngineController {
     ) {}
     fun setSubtitleDelayMs(delayMs: Int) {}
 
+    /** The title being played, so the audio sync can look up English reference subtitles. */
+    fun setAudioSyncContent(type: String, videoId: String) {}
+
     /**
      * Android ExoPlayer runs the embedded-track matcher itself and returns true.
      * Other engines return false and the caller retimes, then [replaceExternalSubtitleBody].

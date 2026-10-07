@@ -105,6 +105,33 @@ internal class AsrSyncEngine(
     @Volatile
     private var locked = false
 
+    /** One mapping a reference proposed, kept so the agreement between several can be read off. */
+    private class Estimate(val referenceKey: String, val scale: Double, val shiftMs: Double)
+
+    private val estimates = ArrayDeque<Estimate>()
+
+    /**
+     * The shift several recent estimates at [scale] agree on, or null while they still disagree.
+     * Agreement from two different reference files counts sooner than from one repeating itself,
+     * since two files only land together when the mapping is right. The median of the agreeing
+     * estimates is returned: it ignores the odd estimate that lands far away.
+     */
+    private fun consensusShiftMs(scale: Double): Double? {
+        val sameRate = estimates.filter { abs(it.scale - scale) < 1e-6 }
+        if (sameRate.size < CONSENSUS_MIN_ESTIMATES) return null
+        var best: List<Estimate>? = null
+        for (centre in sameRate) {
+            val cluster = sameRate.filter { abs(it.shiftMs - centre.shiftMs) <= CONSENSUS_WINDOW_MS }
+            val references = cluster.distinctBy { it.referenceKey }.size
+            val enough = cluster.size >= CONSENSUS_MIN_ESTIMATES &&
+                (references >= 2 || cluster.size >= CONSENSUS_MIN_ESTIMATES_ONE_REFERENCE)
+            if (enough && (best == null || cluster.size > best.size)) best = cluster
+        }
+        val cluster = best ?: return null
+        val shifts = cluster.map { it.shiftMs }.sorted()
+        return shifts[shifts.size / 2]
+    }
+
     /** The reference-to-video ratio [mostLikelyRate] chose, for how many words and in what situation. */
     private class ChosenRate(val situation: String, val words: Int, val rate: Double)
 
@@ -186,6 +213,7 @@ internal class AsrSyncEngine(
             target = targetTrack
             references = referenceSubtitles
             locked = false
+            estimates.clear()
             provisional = null
             lock.notifyAll()
         }
@@ -207,6 +235,7 @@ internal class AsrSyncEngine(
             target = null
             references = emptyList()
             locked = false
+            estimates.clear()
             provisional = null
         }
     }
@@ -219,6 +248,7 @@ internal class AsrSyncEngine(
             covered.clear()
             heard.clear()
             locked = false
+            estimates.clear()
             provisional = null
         }
     }
@@ -302,56 +332,73 @@ internal class AsrSyncEngine(
         }
         if (words.isEmpty()) return
         var best: Pair<ReferenceSubtitle, AnchorFit>? = null
-        var bestLocals: List<AnchorFit> = emptyList()
         for (reference in refs) {
             val fit = reference.matcher.fit(words) ?: continue
-            val locals = reference.matcher.localFits(words, fit.scale)
             // A scene the release adds splits the words into two strong clusters, so one fit over
             // all words looks ambiguous; regions that are each confident explain it.
-            if (!fit.isConfident && !explainsSteps(locals)) continue
-            if (best == null || fit.score > best.second.score) {
-                best = reference to fit
-                bestLocals = locals
-            }
+            if (!fit.isConfident && !explainsSteps(reference.matcher.localFits(words, fit.scale))) continue
+            if (best == null || fit.score > best.second.score) best = reference to fit
         }
         val (reference, fit) = best ?: return
         val bridge = reference.bridge
-        // Words over a short stretch pin where the reference is, not its frame rate relative to the
-        // video: that is only known from a long span of words (or the words chose another rate).
-        val localSpanSec = if (bestLocals.size >= 3) bestLocals.last().anchorSec - bestLocals.first().anchorSec else 0.0
-        val rateKnown = fit.spanSec >= FINAL_SPAN_SEC || fit.scale != 1.0 || localSpanSec >= FINAL_SPAN_SEC
-        val (scale, coarseShiftMs, fine) = if (rateKnown) {
-            // Compose target -> reference -> media.
-            val scale = fit.scale * (bridge?.scale ?: 1.0)
-            val coarseShiftMs = (fit.scale * (bridge?.shiftSec ?: 0.0) + fit.shiftSec) * 1_000.0
-            Triple(scale, coarseShiftMs, fineTune(targetTrack, scale, coarseShiftMs))
-        } else {
-            mostLikelyRate(targetTrack, words, fit, bridge)
-        }
+        // Words pin where the reference is, never its frame rate relative to the video: the matcher
+        // absorbs a few percent over the stretch it matched, and a reference from another release
+        // carries a rate of its own that belongs to the reference, not to the video. Composing
+        // fit.scale with the bridge therefore produces a rate nothing ever checked (Smallville S1E1:
+        // a reference whose bridge says 0.95904 took the subtitle from -36.1 s to -4.7 s, while the
+        // audio says 1.0 every time). mostLikelyRate tries each candidate rate against the detected
+        // speech and keeps the unstretched one unless another clearly fits better, so the audio
+        // always has the last word on the rate.
+        val (scale, coarseShiftMs, fine) = mostLikelyRate(targetTrack, words, fit, bridge)
         val trustedFine = fine?.takeIf { isTrustedMove(it, coarseShiftMs) }
         val shiftMs = trustedFine?.shiftMs ?: coarseShiftMs
         val segments = piecewise(targetTrack, words, reference, fit, scale, shiftMs)
             ?: listOf(SubtitleSyncSegment(0L, scale, shiftMs))
-        val result = AsrLock(
-            scale = scale,
-            shiftMs = segments.first().shiftMs,
-            referenceKey = reference.key,
-            anchorScore = fit.score,
-            fineTuned = trustedFine != null,
-            final = rateKnown || locked,
-            segments = segments,
-        )
+        // Individual estimates wobble by a second or two and now and then one lands far away, so no
+        // single one is worth committing to. What is worth committing to is the value several of
+        // them agree on, ideally from different reference files, since each carries its own release
+        // timing. On Smallville S1E1 seven of eight estimates sat inside a one-second window from
+        // twenty seconds in, with one outlier 31 s away; the consensus is both the right answer and
+        // a steadier one than any estimate on its own.
+        val consensus = synchronized(lock) {
+            estimates += Estimate(reference.key, scale, segments.first().shiftMs)
+            while (estimates.size > MAX_ESTIMATES) estimates.removeFirst()
+            consensusShiftMs(scale)
+        }
+        val result = if (consensus != null) {
+            AsrLock(
+                scale = scale,
+                shiftMs = consensus,
+                referenceKey = reference.key,
+                anchorScore = fit.score,
+                fineTuned = trustedFine != null,
+                final = true,
+                segments = listOf(SubtitleSyncSegment(0L, scale, consensus)),
+            )
+        } else {
+            AsrLock(
+                scale = scale,
+                shiftMs = segments.first().shiftMs,
+                referenceKey = reference.key,
+                anchorScore = fit.score,
+                fineTuned = trustedFine != null,
+                final = locked,
+                segments = segments,
+            )
+        }
         synchronized(lock) {
             if (target !== targetTrack) return
             val previous = provisional
             val tolerance = if (previous?.final == true) SETTLED_UPDATE_MIN_MS else UPDATE_MIN_MS
             if (previous != null && previous.final == result.final && sameMapping(previous, result, tolerance)) return
+            // Once the consensus has spoken, only the consensus may speak again.
+            if (locked && consensus == null) return
             if (result.final) locked = true
             provisional = result
         }
         log(
             "words=${words.size} reference=${reference.key} fit=$fit bridge=$bridge " +
-                "coarse=${coarseShiftMs.toLong()}ms fine=${fine?.shiftMs?.toLong()} rateKnown=$rateKnown",
+                "coarse=${coarseShiftMs.toLong()}ms fine=${fine?.shiftMs?.toLong()} consensus=$consensus",
         )
         onLock(result)
     }
@@ -384,9 +431,13 @@ internal class AsrSyncEngine(
         scale: Double,
         shiftMs: Double,
     ): List<SubtitleSyncSegment>? {
-        val confidentLocals = reference.matcher.localFits(words, fit.scale)
-        if (confidentLocals.isEmpty()) return null
         val bridgeScale = reference.bridge?.scale ?: 1.0
+        // The rate the audio chose for this reference, the one [scale] was composed from. Matching
+        // the regions at fit.scale instead would place every reference line a growing amount off
+        // across the film, which then reads as steps the subtitle never had.
+        val referenceRate = scale / bridgeScale
+        val confidentLocals = reference.matcher.localFits(words, referenceRate)
+        if (confidentLocals.isEmpty()) return null
 
         // Target -> media shift a fit implies at the chosen scale, through its anchor. The target
         // is placed against the reference by the lines around there, not the whole file.
@@ -400,7 +451,7 @@ internal class AsrSyncEngine(
         // stretch its words come from (standing for the confident regions there that agree with
         // it); otherwise one strong region (say the opening, heard in full) would decide the whole
         // film. Not when a confident region inside that stretch says otherwise.
-        val spread = reference.matcher.fitByPlace(words, fit.scale)?.takeIf { spread ->
+        val spread = reference.matcher.fitByPlace(words, referenceRate)?.takeIf { spread ->
             val shift = impliedShiftMs(spread)
             spread.segments >= MIN_PART_SEGMENTS && spread.spanSec >= SPREAD_MIN_SPAN_SEC &&
                 confidentLocals.none {
@@ -570,7 +621,11 @@ internal class AsrSyncEngine(
 
         /** Peak lead over any offset more than 2.5 s away that a larger move needs. */
         private const val FINE_TUNE_MIN_PROMINENCE = 0.05
-        private const val FINAL_SPAN_SEC = 180.0
+        /** How close estimates must land to count as agreeing, against their second or so of wobble. */
+        private const val CONSENSUS_WINDOW_MS = 1_000.0
+        private const val CONSENSUS_MIN_ESTIMATES = 3
+        private const val CONSENSUS_MIN_ESTIMATES_ONE_REFERENCE = 4
+        private const val MAX_ESTIMATES = 12
 
         /** Correlation a stretched mapping must win by over the unstretched one. */
         private const val OTHER_RATE_MARGIN = 0.04

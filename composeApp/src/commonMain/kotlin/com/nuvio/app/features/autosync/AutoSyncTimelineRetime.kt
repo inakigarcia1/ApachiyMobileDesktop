@@ -80,6 +80,14 @@ internal object AutoSyncTimelineRetimer {
     private const val DISCOVERED_MIN_TARGET_COVERAGE = 0.90
     private const val DISCOVERED_MAX_AVERAGE_GROUP_COST = 1.10
     private const val DISCOVERED_MIN_SIMPLE_GROUP_RATIO = 0.55
+
+    // ponytail: PGS indexes are display/clear events. Smallville S1E1 English SDH
+    // landed at margin 0.013 and target coverage 0.88; the dub tracks stayed under 0.01.
+    private const val PGS_ACTIVITY_MIN_MARGIN = 0.01
+    private const val PGS_DISCOVERED_MIN_TARGET_COVERAGE = 0.86
+    private const val PGS_DISCOVERED_MAX_AVERAGE_GROUP_COST = 1.25
+    // ponytail: SDH PGS vs a plain Spanish SRT leaves one unmatched run (Smallville S1E1: 30).
+    private const val PGS_MAX_LONGEST_TARGET_SKIP_RUN = 32
     private const val SEGMENTATION_IMBALANCE_RATIO = 1.60
     private const val SEGMENTATION_MIN_TIMELINE_COVERAGE = 0.80
     private const val COVERAGE_SEGMENT_MIN_COVERAGE = 0.72
@@ -149,6 +157,7 @@ internal object AutoSyncTimelineRetimer {
         allowPrecomputedDelayFastPath: Boolean = true,
         cancellationCheck: (() -> Unit)? = null,
         timingObserver: ((AutoSyncRetimePhaseTimings) -> Unit)? = null,
+        bitmapCueIndex: Boolean = false,
     ): AutoSyncTimelineRetimeResult? {
         val timingEnabled = timingObserver != null
         val totalMark = if (timingEnabled) TimeSource.Monotonic.markNow() else null
@@ -184,6 +193,7 @@ internal object AutoSyncTimelineRetimer {
                 coarseInterceptMs = coarseInterceptMs,
                 referenceEstimatedEndStartsMs = referenceEstimatedEndStartsMs,
                 cancellationCheck = cancellationCheck,
+                maxTargetSkipRun = if (bitmapCueIndex) PGS_MAX_LONGEST_TARGET_SKIP_RUN else MAX_LONGEST_TARGET_SKIP_RUN,
             ) ?: return null
             dpMs += elapsedMs(dpMark)
 
@@ -240,6 +250,7 @@ internal object AutoSyncTimelineRetimer {
                 coarseInterceptMs = fastDelayOnly.offsetMs,
                 referenceEstimatedEndStartsMs = referenceEstimatedEndStartsMs,
                 cancellationCheck = cancellationCheck,
+                maxTargetSkipRun = if (bitmapCueIndex) PGS_MAX_LONGEST_TARGET_SKIP_RUN else MAX_LONGEST_TARGET_SKIP_RUN,
             )
             dpMs += elapsedMs(fastDpMark)
             if (fastResult != null) {
@@ -255,6 +266,7 @@ internal object AutoSyncTimelineRetimer {
                     candidateActivityMargin = fastDelayOnly.margin,
                     delayOnly = true,
                     allowAmbiguousDelayOnlyMargin = false,
+                    bitmapCueIndex = bitmapCueIndex,
                 )
                 validationMs += elapsedMs(fastValidationMark)
                 if (validatedFast.confident) {
@@ -309,6 +321,7 @@ internal object AutoSyncTimelineRetimer {
             coarseInterceptMs = candidateInterceptMs,
             referenceEstimatedEndStartsMs = referenceEstimatedEndStartsMs,
             cancellationCheck = cancellationCheck,
+            maxTargetSkipRun = if (bitmapCueIndex) PGS_MAX_LONGEST_TARGET_SKIP_RUN else MAX_LONGEST_TARGET_SKIP_RUN,
         ) ?: return null
         dpMs += elapsedMs(dpMark)
 
@@ -325,6 +338,7 @@ internal object AutoSyncTimelineRetimer {
             allowAmbiguousDelayOnlyMargin =
                 allowAmbiguousDelayOnlyMargin ||
                     (delayOnly?.stableSegmentMarginOverride == true),
+            bitmapCueIndex = bitmapCueIndex,
         )
         if (finalized.confident && delayOnly == null) {
             finalized = refineGroupedReplyTiming(
@@ -357,6 +371,7 @@ internal object AutoSyncTimelineRetimer {
         candidateActivityMargin: Double,
         delayOnly: Boolean,
         allowAmbiguousDelayOnlyMargin: Boolean,
+        bitmapCueIndex: Boolean = false,
     ): AutoSyncTimelineRetimeResult {
         val coverageSegments = coverageSegmentsPassed(result, targetSize)
         val simpleRatio = structuralGroupRatio(
@@ -367,8 +382,15 @@ internal object AutoSyncTimelineRetimer {
         val smallSample = targetSize < SMALL_SAMPLE_CUE_LIMIT
         val requiredActivityScore =
             if (smallSample) SMALL_SAMPLE_ACTIVITY_MIN_SCORE else ACTIVITY_MIN_SCORE
-        val requiredActivityMargin =
-            if (smallSample) SMALL_SAMPLE_ACTIVITY_MIN_MARGIN else ACTIVITY_MIN_MARGIN
+        val requiredActivityMargin = when {
+            smallSample -> SMALL_SAMPLE_ACTIVITY_MIN_MARGIN
+            bitmapCueIndex -> PGS_ACTIVITY_MIN_MARGIN
+            else -> ACTIVITY_MIN_MARGIN
+        }
+        val minTargetCoverage =
+            if (bitmapCueIndex) PGS_DISCOVERED_MIN_TARGET_COVERAGE else DISCOVERED_MIN_TARGET_COVERAGE
+        val maxAverageGroupCost =
+            if (bitmapCueIndex) PGS_DISCOVERED_MAX_AVERAGE_GROUP_COST else DISCOVERED_MAX_AVERAGE_GROUP_COST
         val requiredCoverageSegments =
             if (smallSample) SMALL_SAMPLE_REQUIRED_COVERAGE_SEGMENTS else 3
         val activityMarginAccepted =
@@ -392,12 +414,16 @@ internal object AutoSyncTimelineRetimer {
             result.confident &&
                 (activityAccepted || structuralLock) &&
                 coverageSegments >= requiredCoverageSegments &&
-                result.targetCoverage >= DISCOVERED_MIN_TARGET_COVERAGE &&
+                result.targetCoverage >= minTargetCoverage &&
                 (
-                    result.averageGroupCost <= DISCOVERED_MAX_AVERAGE_GROUP_COST ||
+                    result.averageGroupCost <= maxAverageGroupCost ||
                         structuralLock
                     ) &&
-                result.longestTargetSkipRun <= MAX_LONGEST_TARGET_SKIP_RUN &&
+                result.longestTargetSkipRun <= if (bitmapCueIndex) {
+                    PGS_MAX_LONGEST_TARGET_SKIP_RUN
+                } else {
+                    MAX_LONGEST_TARGET_SKIP_RUN
+                } &&
                 simpleRatio >= DISCOVERED_MIN_SIMPLE_GROUP_RATIO
 
         return result.copy(
@@ -419,6 +445,7 @@ internal object AutoSyncTimelineRetimer {
         coarseInterceptMs: Double,
         referenceEstimatedEndStartsMs: Set<Long>,
         cancellationCheck: (() -> Unit)? = null,
+        maxTargetSkipRun: Int = MAX_LONGEST_TARGET_SKIP_RUN,
     ): AutoSyncTimelineRetimeResult? {
         if (reference.size < MIN_CUES || target.size < MIN_CUES) return null
         if (!coarseScale.isFinite() || coarseScale !in 0.85..1.15) return null
@@ -656,7 +683,7 @@ internal object AutoSyncTimelineRetimer {
             matchedTargetCount >= min(MIN_MATCHED_TARGET_CUES, target.size) &&
                 targetCoverage >= MIN_TARGET_COVERAGE &&
                 averageGroupCost <= MAX_AVERAGE_GROUP_COST &&
-                longestTargetSkipRun <= MAX_LONGEST_TARGET_SKIP_RUN
+                longestTargetSkipRun <= maxTargetSkipRun
 
         val shapeCounts = groups.groupingBy { "${it.referenceCount}:${it.targetCount}" }.eachCount()
 

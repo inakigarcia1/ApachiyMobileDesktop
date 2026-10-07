@@ -1135,9 +1135,7 @@ internal object AutomaticSubtitleSync {
                         referenceActivityCache,
                     )
                     if (referenceActivity != null && family.noFit.recordNoFit(referenceActivity)) {
-                        family.abandoned = true
                         val skippedPairs = queuedPairs.count { it.family === family }
-                        queuedPairs.removeAll { it.family === family }
                         AutoSyncDebugLog.info {
                             "GLOBAL scheduler abandoned candidate=${family.representative.index} " +
                                 "noFitSources=${family.noFit.sourceCount} skippedPairs=$skippedPairs"
@@ -2331,6 +2329,7 @@ internal object AutomaticSubtitleSync {
             allowPrecomputedDelayFastPath = allowPrecomputedDelayFastPath,
             cancellationCheck = cancellationCheck,
             timingObserver = timingObserver,
+            bitmapCueIndex = false,
         )
     }
 

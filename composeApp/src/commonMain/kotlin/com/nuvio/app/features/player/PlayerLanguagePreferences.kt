@@ -618,6 +618,7 @@ fun resolveContentLanguage(language: String?, country: String?): String? {
 private val COUNTRY_TO_LANGUAGE_MAP = mapOf(
     // ISO 3166-1 alpha-2
     "jp" to "ja", "kr" to "ko", "cn" to "zh", "tw" to "zh",
+    "us" to "en", "gb" to "en", "uk" to "en",
     "fr" to "fr", "de" to "de", "it" to "it", "es" to "es",
     "pt" to "pt", "br" to "pt", "ru" to "ru", "in" to "hi",
     "tr" to "tr", "pl" to "pl", "nl" to "nl", "se" to "sv",
@@ -634,6 +635,8 @@ private val COUNTRY_TO_LANGUAGE_MAP = mapOf(
     "ukr" to "uk", "grc" to "el",
     // Common full names
     "japan" to "ja", "south korea" to "ko", "korea" to "ko",
+    "usa" to "en", "united states" to "en", "united states of america" to "en",
+    "united kingdom" to "en", "england" to "en", "great britain" to "en",
     "china" to "zh", "taiwan" to "zh", "france" to "fr",
     "germany" to "de", "italy" to "it", "spain" to "es",
     "portugal" to "pt", "brazil" to "pt", "russia" to "ru",

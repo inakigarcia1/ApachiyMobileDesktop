@@ -391,6 +391,24 @@ class PlayerTrackSelectionTest {
     }
 
     @Test
+    fun usaCountryResolvesToEnglishAndJapanToJapanese() {
+        assertEquals("en", resolveContentLanguage(language = null, country = "usa"))
+        assertEquals("ja", resolveContentLanguage(language = null, country = "japan"))
+    }
+
+    @Test
+    fun originalEnglishDtsHdBeatsRussianAc3WhenDtsDecoderExists() {
+        val tracks = listOf(
+            AudioTrack(index = 0, id = "0", label = "Ruso, Estéreo (AC-3)", language = "ru"),
+            AudioTrack(index = 1, id = "1", label = "Inglés DTS-HD MA 5.1", language = "en"),
+        )
+        assertEquals(
+            1,
+            findPreferredOriginalAudioTrackIndex(tracks, "en", setOf("aac", "ac3", "dts")),
+        )
+    }
+
+    @Test
     fun originalJapaneseAudioSkipsUnsupportedEnglishTrueHd() {
         val tracks = listOf(
             AudioTrack(index = 0, id = "0", label = "TrueHD 5.1", language = "en"),

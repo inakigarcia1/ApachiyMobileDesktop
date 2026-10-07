@@ -295,6 +295,7 @@ internal class AudioSyncFallback(
     }
 
     private fun toast(status: AudioSyncStatus) {
+        if (!ApachiyProductSettings.operatorSettingsVisible) return
         status.devNotice()?.let(onDevNotice)
         scope.launch {
             val message = status.message() ?: return@launch

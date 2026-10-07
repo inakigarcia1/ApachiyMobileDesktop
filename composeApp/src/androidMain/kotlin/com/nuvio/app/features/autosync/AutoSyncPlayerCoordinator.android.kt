@@ -11,6 +11,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.features.player.PlayerSubtitleUtils
 import com.nuvio.app.features.player.SidecarSubtitleController
+import com.nuvio.app.features.player.SubtitleLanguageMatching
 import com.nuvio.app.features.player.SubtitleSyncStatus
 import com.nuvio.app.features.player.audiosync.AudioSyncFallback
 import kotlinx.coroutines.CancellationException
@@ -28,6 +29,12 @@ import kotlin.math.roundToInt
 
 private const val TAG = "NuvioAutoSyncPlayer"
 private const val SPANISH_SYNC_LANGUAGE = "es"
+
+/** The open OpenSubtitles addon: no key, no account, same shape as any Stremio subtitle addon. */
+private const val OPEN_SUBTITLES_ADDON = "https://opensubtitles-v3.strem.io"
+
+/** Enough for AutoSync to find a well-timed one without downloading half of OpenSubtitles. */
+private const val MAX_EXTRA_CANDIDATES = 5
 
 internal class AutoSyncPlayerCoordinator(
     private val context: Context,
@@ -60,6 +67,11 @@ internal class AutoSyncPlayerCoordinator(
     private var retryContext: RetryContext? = null
     private var retryOperationToken = 0L
     private var candidates: List<AutoSyncSubtitleCandidate> = emptyList()
+
+    /** Same-language files fetched straight from the open addon, for AutoSync to choose among. */
+    private val extraCandidates = java.util.concurrent.CopyOnWriteArrayList<AutoSyncSubtitleCandidate>()
+    private var extraCandidatesKey: String? = null
+    private var extraCandidatesJob: Job? = null
     private var appliedListener: ((subtitleUrl: String, delayMs: Int) -> Unit)? = null
     private val _retryState = MutableStateFlow(AutoSyncRetryUiState())
     val retryState: StateFlow<AutoSyncRetryUiState> = _retryState.asStateFlow()
@@ -67,6 +79,45 @@ internal class AutoSyncPlayerCoordinator(
     fun setCandidates(value: List<AutoSyncSubtitleCandidate>) {
         candidates = value.distinctBy { it.url }
         audioFallback.setCandidates(candidates.map { Triple(it.url, it.language, it.name) })
+    }
+
+    fun setAudioSyncContent(type: String, videoId: String) {
+        audioFallback.setContent(type, videoId)
+        val key = "$type|$videoId"
+        if (key == extraCandidatesKey) return
+        extraCandidatesKey = key
+        extraCandidates.clear()
+        extraCandidatesJob?.cancel()
+        extraCandidatesJob = scope.launch { loadExtraCandidates(type, videoId) }
+    }
+
+    /**
+     * The subtitle the user sees is whichever one the addons ranked first, and a release this one
+     * was not made for cannot be retimed into place at all: on Smallville S1E1 the chosen file runs
+     * four minutes longer than the video's own subtitle tracks and no reference in four languages
+     * matches it. Offering AutoSync a few more files in the same language lets it pick one that is
+     * actually timed for this release, which stays invisible to the user: still one subtitle.
+     */
+    private suspend fun loadExtraCandidates(type: String, videoId: String) {
+        val canonicalType = if (type.equals("tv", ignoreCase = true)) "series" else type.lowercase()
+        val url = "$OPEN_SUBTITLES_ADDON/subtitles/$canonicalType/$videoId.json"
+        val found = runCatching {
+            val body = AutomaticSubtitleSync.downloadSubtitleBody(url = url, headers = emptyMap())
+            val array = org.json.JSONObject(body).optJSONArray("subtitles") ?: org.json.JSONArray()
+            (0 until array.length()).mapNotNull { index ->
+                val item = array.optJSONObject(index) ?: return@mapNotNull null
+                val subtitleUrl = item.optString("url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val language = item.optString("lang")
+                if (!SubtitleLanguageMatching.matchesLanguageCode(language, SPANISH_SYNC_LANGUAGE)) {
+                    return@mapNotNull null
+                }
+                AutoSyncSubtitleCandidate(url = subtitleUrl, language = language, name = "OpenSubtitles")
+            }.distinctBy { it.url }.take(MAX_EXTRA_CANDIDATES)
+        }.getOrElse { error ->
+            Log.w(TAG, "extra subtitle lookup failed for $videoId: ${error.message}")
+            emptyList()
+        }
+        extraCandidates.addAll(found)
     }
 
     fun setAppliedListener(
@@ -386,9 +437,9 @@ internal class AutoSyncPlayerCoordinator(
                 selectedSubtitleHeaders = subtitleHeaders,
                 selectedSubtitleBodyDeferred = selectedSubtitleBodyDeferred,
                 preferredLanguage = SPANISH_SYNC_LANGUAGE,
-                alternativeSubtitles = candidateScope.alternativeCandidates(candidates),
+                alternativeSubtitles = candidateScope.alternativeCandidates(candidates + extraCandidates),
                 alternativeSubtitlesProvider = if (candidateScope.usesAlternativeProvider) {
-                    { candidates }
+                    { candidates + extraCandidates }
                 } else {
                     null
                 },
@@ -400,11 +451,18 @@ internal class AutoSyncPlayerCoordinator(
             }
 
             if (resolved == null) {
-                val handedToAudio = noSubtitleTracks &&
-                    sidecar.activeSidecarSubtitleKey == url &&
-                    isStillSelected() &&
-                    audioFallback.takeOver(url)
-                if (handedToAudio) return@launch
+                // Embedded tracks sit on the video's own timeline, so they answer in seconds and
+                // without a byte of audio. When the file has them, listening to the audio for two
+                // minutes to reach a shakier answer is the wrong trade: fix the embedded match.
+                val handedToAudio =
+                    noSubtitleTracks &&
+                        sidecar.activeSidecarSubtitleKey == url &&
+                        isStillSelected() &&
+                        audioFallback.takeOver(url)
+                if (handedToAudio) {
+                    showAutoSyncNotice("Audio Sync started")
+                    return@launch
+                }
                 restoreOriginalSubtitleIfSidecarFailed()
                 if (AutoSyncDebugLog.ENABLED) {
                     AutoSyncDebugLog.finishAndCopy(

@@ -439,9 +439,6 @@ internal object EmbeddedSubtitleTimelineLoader {
                     estimatedEndStartsMs = parsedTimeline.estimatedEndStartsMs,
                 )
             }
-        }.let { built ->
-            val text = built.filter { !it.key.contains("#p") }
-            if (text.isNotEmpty()) text else built
         }
 
         if (referenceTracks.isEmpty()) {

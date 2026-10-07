@@ -519,7 +519,13 @@ internal class AudioSubtitleSyncController(
 
     fun onAudioTrackSelected(format: Format?) {
         if (format == null || selectedAudioFormat?.let { matches(it, format) } == true) return
+        val previous = selectedAudioFormat
         selectedAudioFormat = format
+        if (previous != null && isEnglish(previous.language) != isEnglish(format.language)) {
+            timeline.clear()
+            decoder?.discontinuity()
+            SyncLog.i("audio language changed from ${previous.language} to ${format.language}; speech timeline reset")
+        }
         SyncLog.d("audio track selected: ${describe(format)}")
         updateListening()
         if (session != null && enabled && !audioIsForeign()) ensureRecognizer()

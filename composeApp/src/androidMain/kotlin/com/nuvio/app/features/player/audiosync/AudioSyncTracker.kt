@@ -143,7 +143,11 @@ internal class AudioSyncTracker(
         pendingJump = null
         agreeingRuns = 0
         disagreeingRuns = 0
+        adoptedModel = true
     }
+
+    /** A mapping found elsewhere, which this tracker may only move on a cold lock's evidence. */
+    private var adoptedModel = false
 
     fun update(timeline: SpeechTimeline, playbackPositionMs: Long): Outcome {
         val known = timeline.knownRange() ?: return Outcome.NotEnoughEvidence
@@ -326,7 +330,12 @@ internal class AudioSyncTracker(
             maxShiftMs = segment.shiftMs + REFINE_RANGE_MS,
         ) ?: return Outcome.Unchanged(null)
         lastEstimate = refined
-        if (refined.prominence < REFINE_MIN_PROMINENCE || !hasEnoughEvidence(refined)) {
+        // Recognition matched heard words against the subtitle's own lines. Moving that needs the
+        // confidence a cold lock needs, not the lower bar for nudging this tracker's own estimate:
+        // on Smallville S1E1 refinements at prominence 0.06 dragged the subtitle between -34.2 s
+        // and -37.6 s while recognition held -36.2 s, and each move re-announced itself on screen.
+        val minProminence = if (adoptedModel) ACCEPT_PROMINENCE else REFINE_MIN_PROMINENCE
+        if (refined.prominence < minProminence || !hasEnoughEvidence(refined)) {
             return Outcome.Unchanged(refined)
         }
         val movement = abs(refined.shiftMs - segment.shiftMs)

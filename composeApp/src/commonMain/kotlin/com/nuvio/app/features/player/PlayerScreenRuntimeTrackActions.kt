@@ -219,6 +219,13 @@ internal fun PlayerScreenRuntime.refreshTracks() {
     restorePersistedTrackPreferenceIfNeeded()
 
     val contentOriginalLanguage = resolvePlaybackContentOriginalLanguage()
+    val playingLanguage = resolveAudioTrackLanguageTarget(audioTracks.firstOrNull { it.isSelected })
+    if (
+        contentOriginalLanguage != null &&
+        !languageMatchesPreference(playingLanguage, contentOriginalLanguage)
+    ) {
+        preferredAudioSelectionApplied = false
+    }
     val preferredAudioTargets = resolvePreferredAudioLanguageTargets(
         preferredAudioLanguage = AudioLanguageOption.ORIGINAL,
         secondaryPreferredAudioLanguage = null,
