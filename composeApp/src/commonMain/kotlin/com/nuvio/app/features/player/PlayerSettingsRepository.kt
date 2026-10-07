@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
 
+internal const val DEFAULT_PREFERRED_SUBTITLE_LANGUAGE = "es"
+internal const val DEFAULT_SECONDARY_SUBTITLE_LANGUAGE = "es-419"
+
 val STREAM_AUTO_PLAY_TIMEOUT_VALUES: List<Int> = listOf(
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, Int.MAX_VALUE
 )
@@ -46,8 +49,8 @@ data class PlayerSettingsUiState(
     val externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId(),
     val preferredAudioLanguage: String = AudioLanguageOption.ORIGINAL,
     val secondaryPreferredAudioLanguage: String? = null,
-    val preferredSubtitleLanguage: String = SubtitleLanguageOption.NONE,
-    val secondaryPreferredSubtitleLanguage: String? = null,
+    val preferredSubtitleLanguage: String = DEFAULT_PREFERRED_SUBTITLE_LANGUAGE,
+    val secondaryPreferredSubtitleLanguage: String? = DEFAULT_SECONDARY_SUBTITLE_LANGUAGE,
     val subtitleStyle: SubtitleStyleState = SubtitleStyleState.DEFAULT,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
@@ -115,8 +118,8 @@ object PlayerSettingsRepository {
     private var externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId()
     private var preferredAudioLanguage = AudioLanguageOption.ORIGINAL
     private var secondaryPreferredAudioLanguage: String? = null
-    private var preferredSubtitleLanguage = SubtitleLanguageOption.NONE
-    private var secondaryPreferredSubtitleLanguage: String? = null
+    private var preferredSubtitleLanguage = DEFAULT_PREFERRED_SUBTITLE_LANGUAGE
+    private var secondaryPreferredSubtitleLanguage: String? = DEFAULT_SECONDARY_SUBTITLE_LANGUAGE
     private var subtitleStyle = SubtitleStyleState.DEFAULT
     private var streamReuseLastLinkEnabled = false
     private var streamReuseLastLinkCacheHours = 24
@@ -189,8 +192,8 @@ object PlayerSettingsRepository {
         externalPlayerId = ExternalPlayerPlatform.defaultPlayerId()
         preferredAudioLanguage = AudioLanguageOption.ORIGINAL
         secondaryPreferredAudioLanguage = null
-        preferredSubtitleLanguage = SubtitleLanguageOption.NONE
-        secondaryPreferredSubtitleLanguage = null
+        preferredSubtitleLanguage = DEFAULT_PREFERRED_SUBTITLE_LANGUAGE
+        secondaryPreferredSubtitleLanguage = DEFAULT_SECONDARY_SUBTITLE_LANGUAGE
         subtitleStyle = SubtitleStyleState.DEFAULT
         streamReuseLastLinkEnabled = false
         streamReuseLastLinkCacheHours = 24
@@ -270,9 +273,10 @@ object PlayerSettingsRepository {
             normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredAudioLanguage())
         preferredSubtitleLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadPreferredSubtitleLanguage())
-                ?: SubtitleLanguageOption.NONE
+                ?: DEFAULT_PREFERRED_SUBTITLE_LANGUAGE
         secondaryPreferredSubtitleLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredSubtitleLanguage())
+                ?: DEFAULT_SECONDARY_SUBTITLE_LANGUAGE
         subtitleStyle = SubtitleStyleState(
             textColor = subtitleColorFromStorage(PlayerSettingsStorage.loadSubtitleTextColor())
                 ?: SubtitleStyleState.DEFAULT.textColor,
