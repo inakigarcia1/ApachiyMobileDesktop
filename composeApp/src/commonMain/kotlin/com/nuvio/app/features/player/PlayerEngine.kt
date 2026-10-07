@@ -18,6 +18,7 @@ interface PlayerEngineController {
     fun getAudioTracks(): List<AudioTrack>
     fun getSubtitleTracks(): List<SubtitleTrack>
     fun selectAudioTrack(index: Int)
+    fun setOnAudioTrackUnplayable(listener: ((Int) -> Unit)?) {}
     fun selectSubtitleTrack(index: Int)
     fun setSubtitleUri(url: String)
     fun clearExternalSubtitle()
@@ -51,6 +52,20 @@ interface PlayerEngineController {
 
     /** Replaces the external subtitle already on screen with [body], without reloading the video. */
     fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean = false
+
+    fun setAutoSyncNoticeHandler(handler: ((String) -> Unit)?) {}
+
+    /**
+     * Desktop/libmpv path when embedded subtitle timing is unavailable. Returns true if a background
+     * audio-alignment job was started.
+     */
+    fun runDesktopAudioSyncFallback(
+        subtitleUrl: String,
+        subtitleHeaders: Map<String, String>,
+        contentType: String?,
+        videoId: String?,
+        isStillSelected: () -> Boolean = { true },
+    ): Boolean = false
     fun configureIosVideoOutput(settings: PlayerSettingsUiState) {}
     fun updateNowPlayingMetadata(info: PlayerNowPlayingInfo) {}
     fun clearNowPlayingInfo() {}

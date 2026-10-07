@@ -219,10 +219,6 @@
           </div>
         </div>
       </section>
-      <section class="player-toast" id="playerToast" aria-live="polite" aria-atomic="true" aria-hidden="true">
-        <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
-        <span class="player-toast-text" id="playerToastText"></span>
-      </section>
       <section class="modal-layer player-rail-modal" id="speedModal" aria-label="Playback speed" hidden>
         <div class="track-panel audio-rail-panel">
           <div class="track-header" id="speedPanelTitle">Playback Speed</div>
@@ -422,6 +418,10 @@
         </div>
       </section>
     </div>
+    <section class="player-toast" id="playerToast" aria-live="polite" aria-atomic="true" aria-hidden="true">
+      <svg class="player-toast-icon" id="playerToastIcon" aria-hidden="true" hidden><use id="playerToastIconUse" href="#icon-speed"></use></svg>
+      <span class="player-toast-text" id="playerToastText"></span>
+    </section>
   </div>
 
   <script src="controls.js"></script>

@@ -26,6 +26,7 @@ private data class StoredTorboxSpeed(
     val speedMbps: Double,
     val measuredAtEpochMs: Long,
     val networkSignature: String? = null,
+    val pinnedMbps: Double? = null,
 )
 
 internal actual object TorboxSpeedTestHarness {
@@ -39,14 +40,45 @@ internal actual object TorboxSpeedTestHarness {
 
     actual fun initializePlatform() = Unit
 
+    actual fun readPinnedMbps(): Double? = readStored()?.pinnedMbps?.takeIf { it > 0.0 }
+
+    actual fun setPinnedMbps(mbps: Double?) {
+        val stored = readStored() ?: StoredTorboxSpeed(0.0, 0L)
+        val next = if (mbps == null || mbps <= 0.0) {
+            stored.copy(pinnedMbps = null)
+        } else {
+            stored.copy(pinnedMbps = mbps)
+        }
+        writeStored(next)
+    }
+
     actual fun readSample(): TorboxSpeedSample? {
+        val stored = readStored() ?: return null
+        val pinned = stored.pinnedMbps?.takeIf { it > 0.0 }
+        if (pinned != null) {
+            return TorboxSpeedSample(
+                speedMbps = pinned,
+                measuredAtEpochMs = System.currentTimeMillis(),
+                connectionType = "pinned",
+            )
+        }
+        if (stored.speedMbps <= 0.0 || stored.measuredAtEpochMs <= 0L) return null
+        return TorboxSpeedSample(stored.speedMbps, stored.measuredAtEpochMs, connectionType = null)
+    }
+
+    private fun readStored(): StoredTorboxSpeed? {
         val file = storageFile()
         if (!file.exists()) return null
         return runCatching {
-            val stored = json.decodeFromString<StoredTorboxSpeed>(file.readText(StandardCharsets.UTF_8))
-            if (stored.speedMbps <= 0.0 || stored.measuredAtEpochMs <= 0L) return null
-            TorboxSpeedSample(stored.speedMbps, stored.measuredAtEpochMs, connectionType = null)
+            json.decodeFromString<StoredTorboxSpeed>(file.readText(StandardCharsets.UTF_8))
         }.getOrNull()
+    }
+
+    private fun writeStored(payload: StoredTorboxSpeed) {
+        storageFile().writeText(
+            json.encodeToString(StoredTorboxSpeed.serializer(), payload),
+            StandardCharsets.UTF_8,
+        )
     }
 
     actual fun readStoredNetworkSignature(): String? = null
@@ -54,8 +86,14 @@ internal actual object TorboxSpeedTestHarness {
     actual fun currentNetworkSignature(): String? = null
 
     actual fun persist(sample: TorboxSpeedSample, networkSignature: String?) {
-        val payload = StoredTorboxSpeed(sample.speedMbps, sample.measuredAtEpochMs, networkSignature)
-        storageFile().writeText(json.encodeToString(StoredTorboxSpeed.serializer(), payload), StandardCharsets.UTF_8)
+        val previous = readStored()
+        val payload = StoredTorboxSpeed(
+            speedMbps = sample.speedMbps,
+            measuredAtEpochMs = sample.measuredAtEpochMs,
+            networkSignature = networkSignature,
+            pinnedMbps = previous?.pinnedMbps,
+        )
+        writeStored(payload)
     }
 
     actual suspend fun measure(): TorboxSpeedSample? = withContext(Dispatchers.IO) {

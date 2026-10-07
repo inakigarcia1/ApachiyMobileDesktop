@@ -769,7 +769,10 @@ const setImageVisualState = (element, stateName) => {
 };
 
 const setImageSource = (element, source) => {
-  const url = String(source || "").trim();
+  let url = String(source || "").trim();
+  if (url.startsWith("//")) {
+    url = `https:${url}`;
+  }
   if (!url) {
     element.removeAttribute("src");
     element.removeAttribute("data-loaded-src");

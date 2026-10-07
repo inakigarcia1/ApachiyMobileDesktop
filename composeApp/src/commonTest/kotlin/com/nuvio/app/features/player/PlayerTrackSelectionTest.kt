@@ -2,8 +2,10 @@ package com.nuvio.app.features.player
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PlayerTrackSelectionTest {
 
@@ -429,6 +431,15 @@ class PlayerTrackSelectionTest {
         )
     }
 
+    @Test
+    fun originalAudioSkipsRendererUnsupportedTrack() {
+        val tracks = listOf(
+            AudioTrack(index = 0, id = "0", label = "TrueHD", language = "ja", isSupported = false),
+            AudioTrack(index = 1, id = "1", label = "TrueHD", language = "en", isSupported = true),
+        )
+        assertEquals(1, findPreferredOriginalAudioTrackIndex(tracks, "ja", setOf("truehd")))
+    }
+
     private fun audioTrack(language: String?) = AudioTrack(
         index = 0,
         id = "audio-0",
@@ -449,6 +460,43 @@ class PlayerTrackSelectionTest {
         language = language,
         isForced = isForced,
     )
+
+    @Test
+    fun decoderStallRequiresFrozenPlayheadAndFrozenBuffer() {
+        assertTrue(
+            audioDecoderIsStuck(
+                playWhenReady = true,
+                waiting = true,
+                positionMs = 239_288,
+                bufferedPositionMs = 297_088,
+                sampledPositionMs = 239_288,
+                sampledBufferedPositionMs = 297_088,
+                sampleAgeMs = AUDIO_STALL_FROZEN_MS,
+            )
+        )
+        assertFalse(
+            audioDecoderIsStuck(
+                playWhenReady = true,
+                waiting = true,
+                positionMs = 239_288,
+                bufferedPositionMs = 300_000,
+                sampledPositionMs = 239_288,
+                sampledBufferedPositionMs = 297_088,
+                sampleAgeMs = AUDIO_STALL_FROZEN_MS,
+            )
+        )
+        assertFalse(
+            audioDecoderIsStuck(
+                playWhenReady = false,
+                waiting = true,
+                positionMs = 239_288,
+                bufferedPositionMs = 297_088,
+                sampledPositionMs = 239_288,
+                sampledBufferedPositionMs = 297_088,
+                sampleAgeMs = AUDIO_STALL_FROZEN_MS,
+            )
+        )
+    }
 
     private fun addonSubtitle(
         id: String,

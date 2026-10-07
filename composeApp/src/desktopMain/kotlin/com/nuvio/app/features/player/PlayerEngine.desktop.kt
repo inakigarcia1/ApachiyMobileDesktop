@@ -291,6 +291,7 @@ private fun NativePlayerSurface(
                 coverNativeWhileLoading = true
             }
             onSnapshot(snapshot)
+            controller.notePlaybackSnapshot(snapshot)
             delay(if (!initialPlaybackReady && (snapshot.isLoading || coverNativeWhileLoading)) 50L else 500L)
         }
     }

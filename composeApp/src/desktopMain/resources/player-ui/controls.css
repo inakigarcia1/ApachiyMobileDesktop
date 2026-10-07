@@ -280,12 +280,6 @@ button:disabled {
   transform: translate3d(-50%, 0, 0) scale(1);
 }
 
-.player.opening-active .player-toast,
-.player.error-active .player-toast {
-  opacity: 0;
-  pointer-events: none;
-}
-
 [hidden] {
   display: none !important;
 }

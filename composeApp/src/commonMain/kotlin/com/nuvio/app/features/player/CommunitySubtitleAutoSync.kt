@@ -1,11 +1,11 @@
 package com.nuvio.app.features.player
 
 import com.nuvio.app.core.build.ApachiyProductSettings
-import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
-import com.nuvio.app.features.autosync.AutoSyncSelectedRun
+import com.nuvio.app.features.autosync.CommunityAutoSyncRetime
+import com.nuvio.app.features.autosync.OpenSubtitlesExtraCandidates
 import com.nuvio.app.features.autosync.effectiveAutoSyncEnabled
-import com.nuvio.app.features.autosync.effectiveSyncToleranceMs
+import com.nuvio.app.features.autosync.effectiveSyncToleranceMsForCommunity
 import com.nuvio.app.features.autosync.renderRetimedSrt
 import com.nuvio.app.features.autosync.selectedSubtitleWithinToleranceMs
 import com.nuvio.app.features.player.embedded.DialogueTimingIndex
@@ -52,35 +52,63 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
     ) {
         return
     }
+    val syncContentType = this.contentType?.takeIf { it.isNotBlank() }
+    val syncVideoId = activeVideoId?.takeIf { it.isNotBlank() }
     communityAutoSyncJob = scope.launch {
         showAutoSyncNotice("Auto Sync V2 started")
-        val index = loadDialogueTimingIndex()
+        var index = loadDialogueTimingIndex()
         if (index.hasEmbeddedSpanish) return@launch
+        if (index.tracks.isEmpty() && index.noSubtitleTracks) {
+            handOffToDesktopAudioSync(subtitleUrl, headers, syncContentType, syncVideoId)
+            return@launch
+        }
         if (index.tracks.isEmpty()) {
             showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
             return@launch
         }
-        val body = runCatching {
-            httpGetTextWithHeaders(url = subtitleUrl, headers = headers)
-        }.getOrNull()
-        if (body == null) {
-            showAutoSyncNotice("Auto Sync V2 failed: subtitle could not be loaded")
+        val extraUrls = if (syncContentType != null && syncVideoId != null) {
+            OpenSubtitlesExtraCandidates.load(syncContentType, syncVideoId).map { it.url }
+        } else {
+            emptyList()
+        }
+        var attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
+            index = index,
+            subtitleUrl = subtitleUrl,
+            headers = headers,
+            extraSubtitleUrls = extraUrls,
+        )
+        if (attempt == null && CommunityAutoSyncRetime.indexNeedsPgsSemanticFallback(index, attempt)) {
+            val sourceUrl = httpTimingSourceUrl()
+            if (sourceUrl != null) {
+                val semantic = EmbeddedSubtitleExtractor.loadPgsSemanticDialogueTiming(
+                    sourceUrl = sourceUrl,
+                    headers = headers,
+                )
+                if (semantic != null && semantic.tracks.isNotEmpty()) {
+                    dialogueTimingIndex = semantic
+                    index = semantic
+                    attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
+                        index = index,
+                        subtitleUrl = subtitleUrl,
+                        headers = headers,
+                        extraSubtitleUrls = extraUrls,
+                    )
+                }
+            }
+        }
+        if (attempt == null) {
+            if (index.noSubtitleTracks) {
+                handOffToDesktopAudioSync(subtitleUrl, headers, syncContentType, syncVideoId)
+            } else {
+                showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
+            }
             return@launch
         }
-        if (appliedAddonSubtitleUrl != null && appliedAddonSubtitleUrl != subtitleUrl) return@launch
-        val cues = PlayerSubtitleCueParser.parse(body, subtitleUrl)
-        val timeline = AutoSyncSelectedRun.retime(index.tracks, cues)
-        if (timeline == null) {
-            showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
-            return@launch
-        }
+        if (appliedAddonSubtitleUrl != null && appliedAddonSubtitleUrl != attempt.subtitleUrl) return@launch
         val withinToleranceMs = selectedSubtitleWithinToleranceMs(
-            toleranceMs = effectiveSyncToleranceMs(
-                operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible,
-                storedToleranceMs = AutoSyncPreferencesRepository.syncToleranceMs.value,
-            ),
-            result = timeline,
-            selectedSubtitleKept = true,
+            toleranceMs = effectiveSyncToleranceMsForCommunity(),
+            result = attempt.timeline,
+            selectedSubtitleKept = attempt.subtitleUrl == subtitleUrl,
         )
         if (withinToleranceMs != null) {
             playerController?.setSubtitleDelayMs(0)
@@ -89,13 +117,17 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             )
             return@launch
         }
-        val rewritten = renderRetimedSrt(cues, timeline)
-        val applied = playerController?.replaceExternalSubtitleBody(subtitleUrl, rewritten) == true
+        val rewritten = renderRetimedSrt(attempt.cues, attempt.timeline)
+        val applied = playerController?.replaceExternalSubtitleBody(attempt.subtitleUrl, rewritten) == true
         if (!applied) {
             showAutoSyncNotice("Auto Sync V2 failed: could not apply sync")
             return@launch
         }
+        if (attempt.subtitleUrl != subtitleUrl) {
+            appliedAddonSubtitleUrl = attempt.subtitleUrl
+        }
         playerController?.setSubtitleDelayMs(0)
+        val timeline = attempt.timeline
         val driftCorrected = kotlin.math.abs(timeline.alignmentScale - 1.0) >= 0.0005
         val prefix = "Auto Sync V2 succeeded"
         showAutoSyncNotice(
@@ -109,7 +141,25 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
     }
 }
 
-private fun PlayerScreenRuntime.showAutoSyncNotice(message: String) {
+private suspend fun PlayerScreenRuntime.handOffToDesktopAudioSync(
+    subtitleUrl: String,
+    headers: Map<String, String>,
+    contentType: String?,
+    videoId: String?,
+) {
+    val handedOff = playerController?.runDesktopAudioSyncFallback(
+        subtitleUrl = subtitleUrl,
+        subtitleHeaders = headers,
+        contentType = contentType,
+        videoId = videoId,
+        isStillSelected = { appliedAddonSubtitleUrl == subtitleUrl && useCustomSubtitles },
+    ) == true
+    if (!handedOff) {
+        showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
+    }
+}
+
+internal fun PlayerScreenRuntime.showAutoSyncNotice(message: String) {
     if (!ApachiyProductSettings.operatorSettingsVisible) return
     playerNotificationMessage = message
     playerNotificationToken += 1L

@@ -86,6 +86,24 @@ internal fun PlayerScreenRuntime.persistAudioPreference(track: AudioTrack?) {
     }
 }
 
+internal fun PlayerScreenRuntime.selectAudioTrackFromUser(index: Int): Boolean {
+    val track = audioTracks.firstOrNull { it.index == index }
+    val supportedCodecs = deviceSupportedAudioCodecs()
+    if (track != null && (!track.isSupported || audioTrackKnownIncompatible(track, supportedCodecs))) {
+        unsupportedAudioTrackName = track.noticeName()
+        return false
+    }
+    unsupportedAudioTrackName = null
+    audioIndexBeforeManual = selectedAudioIndex
+    manualAudioSelectionIndex = index
+    userPinnedAudio = true
+    preferredAudioSelectionApplied = true
+    selectedAudioIndex = index
+    persistAudioPreference(track)
+    playerController?.selectAudioTrack(index)
+    return true
+}
+
 internal fun PlayerScreenRuntime.persistInternalSubtitlePreference(track: SubtitleTrack?) {
     updateTrackPreference { current ->
         current.copy(
@@ -137,11 +155,15 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
             !preference.audioName.isNullOrBlank())
     ) {
         val restoredAudioIndex = findPersistedAudioTrackIndex(audioTracks, preference)
-        if (restoredAudioIndex >= 0 && restoredAudioIndex != selectedAudioIndex) {
-            playerController?.selectAudioTrack(restoredAudioIndex)
-            selectedAudioIndex = restoredAudioIndex
+        val restoredAudio = audioTracks.firstOrNull { it.index == restoredAudioIndex }
+        if (restoredAudio != null && restoredAudio.isSupported) {
+            if (restoredAudioIndex != selectedAudioIndex) {
+                playerController?.selectAudioTrack(restoredAudioIndex)
+                selectedAudioIndex = restoredAudioIndex
+            }
+            preferredAudioSelectionApplied = true
+            userPinnedAudio = true
         }
-        preferredAudioSelectionApplied = true
     }
 
     when (preference.subtitleType) {
@@ -204,12 +226,42 @@ internal fun PlayerScreenRuntime.restorePersistedTrackPreferenceIfNeeded() {
     trackPreferenceRestoreApplied = true
 }
 
+internal fun PlayerScreenRuntime.onAudioTrackUnplayable(index: Int) {
+    if (index < 0) return
+    rejectedAudioIndices.add(index)
+    val manual = manualAudioSelectionIndex == index
+    manualAudioSelectionIndex = -1
+    val rejectedName = audioTracks.firstOrNull { it.index == index }?.noticeName()
+    audioTracks = audioTracks.map { track ->
+        if (track.index in rejectedAudioIndices) track.copy(isSupported = false) else track
+    }
+    val revert = audioIndexBeforeManual.takeIf { manual && it >= 0 && it !in rejectedAudioIndices }
+    if (revert != null) {
+        unsupportedAudioTrackName = rejectedName
+        showAudioModal = true
+        userPinnedAudio = true
+        preferredAudioSelectionApplied = true
+        selectedAudioIndex = revert
+        playerController?.selectAudioTrack(revert)
+        persistAudioPreference(audioTracks.firstOrNull { it.index == revert })
+        return
+    }
+    unsupportedAudioTrackName = null
+    userPinnedAudio = false
+    preferredAudioSelectionApplied = false
+    refreshTracks()
+    val picked = audioTracks.firstOrNull { it.index == selectedAudioIndex && it.isSupported }
+    if (picked != null) persistAudioPreference(picked)
+}
+
 internal fun PlayerScreenRuntime.refreshTracks() {
     val ctrl = playerController ?: return
-    audioTracks = ctrl.getAudioTracks()
+    audioTracks = ctrl.getAudioTracks().map { track ->
+        if (track.index in rejectedAudioIndices) track.copy(isSupported = false) else track
+    }
     subtitleTracks = ctrl.getSubtitleTracks()
     val selectedAudio = audioTracks.firstOrNull { it.isSelected }
-    if (selectedAudio != null) selectedAudioIndex = selectedAudio.index
+    if (!userPinnedAudio && selectedAudio != null) selectedAudioIndex = selectedAudio.index
     val selectedSub = subtitleTracks.firstOrNull { it.isSelected }
     if (selectedSub != null && !useCustomSubtitles) selectedSubtitleIndex = selectedSub.index
     if (!playbackSnapshot.isLoading) {
@@ -219,13 +271,6 @@ internal fun PlayerScreenRuntime.refreshTracks() {
     restorePersistedTrackPreferenceIfNeeded()
 
     val contentOriginalLanguage = resolvePlaybackContentOriginalLanguage()
-    val playingLanguage = resolveAudioTrackLanguageTarget(audioTracks.firstOrNull { it.isSelected })
-    if (
-        contentOriginalLanguage != null &&
-        !languageMatchesPreference(playingLanguage, contentOriginalLanguage)
-    ) {
-        preferredAudioSelectionApplied = false
-    }
     val preferredAudioTargets = resolvePreferredAudioLanguageTargets(
         preferredAudioLanguage = AudioLanguageOption.ORIGINAL,
         secondaryPreferredAudioLanguage = null,
@@ -233,7 +278,7 @@ internal fun PlayerScreenRuntime.refreshTracks() {
         contentOriginalLanguage = contentOriginalLanguage,
     )
 
-    if (!preferredAudioSelectionApplied) {
+    if (!userPinnedAudio && !preferredAudioSelectionApplied) {
         if (audioTracks.isEmpty()) {
             return
         }
@@ -432,6 +477,9 @@ private fun PlayerScreenRuntime.tryAutoSelectPreferredSubtitleFromAvailableTrack
         preferredSubtitleSelectionApplied = true
     }
 }
+
+private fun AudioTrack.noticeName(): String =
+    label.trim().ifEmpty { language?.trim().orEmpty() }.ifEmpty { id }
 
 private fun PlayerScreenRuntime.disableAutomaticSubtitleSelection() {
     if (selectedSubtitleIndex != -1 || subtitleTracks.any { it.isSelected }) {

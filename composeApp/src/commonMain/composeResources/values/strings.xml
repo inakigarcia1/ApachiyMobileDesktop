@@ -438,6 +438,7 @@
     <string name="compose_player_no_subtitle_lines_found">No subtitle lines found</string>
     <string name="compose_player_subtitle_lines_load_error">Unable to load subtitle lines</string>
     <string name="compose_player_no_audio_tracks_available">No audio tracks available</string>
+    <string name="compose_player_audio_track_unsupported">The audio track "%1$s" is not supported on your device. Please choose another.</string>
     <string name="compose_player_no_episodes_available">No episodes available</string>
     <string name="compose_player_no_streams_found">No streams found</string>
     <string name="compose_player_none">None</string>
@@ -1162,6 +1163,14 @@
     <string name="settings_playback_torbox_speed_none">No saved measurement</string>
     <string name="settings_playback_torbox_speed_last">Last: %1$s Mbps · %2$s</string>
     <string name="settings_playback_torbox_measure_now">Measure now</string>
+    <string name="settings_playback_torbox_pin_title">Pin bandwidth (dev)</string>
+    <string name="settings_playback_torbox_pin_subtitle">Override the measured Mbps sent with stream requests</string>
+    <string name="settings_playback_torbox_pin_action">Set</string>
+    <string name="settings_playback_torbox_pin_dialog_title">Pin bandwidth</string>
+    <string name="settings_playback_torbox_pin_dialog_subtitle">Mbps used in playback= until cleared</string>
+    <string name="settings_playback_torbox_pin_save">Save</string>
+    <string name="settings_playback_torbox_pin_clear">Clear pin</string>
+    <string name="settings_playback_torbox_pin_invalid">Enter a positive number</string>
     <string name="settings_playback_section_stream_selection">STREAM SELECTION</string>
     <string name="settings_playback_section_subtitle_audio">SUBTITLE AND AUDIO</string>
     <string name="settings_playback_section_subtitle_rendering">SUBTITLE RENDERING</string>

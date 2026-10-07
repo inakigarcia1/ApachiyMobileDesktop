@@ -39,6 +39,12 @@ internal fun TorboxSpeedSettingsGroup(
             )
         }
     }
+    TorboxSpeedPinSettingsRow(
+        isTablet = isTablet,
+        refreshTick = refreshTick,
+        onRefresh = { refreshTick++ },
+        modifier = modifier,
+    )
     SettingsGroup(isTablet = isTablet, modifier = modifier) {
         SettingsNavigationRow(
             title = stringResource(Res.string.settings_playback_torbox_speed_title),

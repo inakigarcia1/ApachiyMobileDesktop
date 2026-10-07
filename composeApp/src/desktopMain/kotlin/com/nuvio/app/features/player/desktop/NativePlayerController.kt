@@ -2,6 +2,8 @@ package com.nuvio.app.features.player.desktop
 
 import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.network.ApachiyAddonAuth
+import com.nuvio.app.core.network.ApachiyConfig
 import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
 import com.nuvio.app.features.player.PlayerControlEpisodeItem
 import com.nuvio.app.features.player.PlayerControlFilterItem
@@ -10,7 +12,9 @@ import com.nuvio.app.features.player.PlayerControlSourceItem
 import com.nuvio.app.features.player.PlayerControlSubtitleCueItem
 import com.nuvio.app.features.player.PlayerControlSubtitleLanguageItem
 import com.nuvio.app.features.player.PlayerControlSubtitleOptionItem
+import com.nuvio.app.features.player.AUDIO_STALL_FROZEN_MS
 import com.nuvio.app.features.player.AudioTrack
+import com.nuvio.app.features.player.audioDecoderIsStuck
 import com.nuvio.app.features.player.ParentalWarning
 import com.nuvio.app.features.player.PlayerControlsAction
 import com.nuvio.app.features.player.PlayerControlsState
@@ -23,7 +27,13 @@ import com.nuvio.app.features.player.SubtitleColorSwatches
 import com.nuvio.app.features.player.SubtitleOutlineColorSwatches
 import com.nuvio.app.features.player.SubtitleStyleState
 import com.nuvio.app.features.player.SubtitleTrack
+import com.nuvio.app.features.player.audioTrackKnownIncompatible
+import com.nuvio.app.features.player.deviceSupportedAudioCodecs
 import com.nuvio.app.features.player.inferForcedSubtitleTrack
+import com.nuvio.app.core.build.ApachiyProductSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.nuvio.app.features.player.toStorageHexString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -79,7 +89,24 @@ internal class NativePlayerController(
 
     private val lifecycleLock = Any()
 
-    @Volatile
+    private val audioSyncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val audioSyncRunner = DesktopAudioSyncRunner(
+        scope = audioSyncScope,
+        controller = this,
+        onDevNotice = { message ->
+            if (ApachiyProductSettings.operatorSettingsVisible) {
+                log.d { "audioSync: $message" }
+                onAutoSyncNotice?.invoke(message)
+            }
+        },
+    )
+
+    private var onAutoSyncNotice: ((String) -> Unit)? = null
+
+    override fun setAutoSyncNoticeHandler(handler: ((String) -> Unit)?) {
+        onAutoSyncNotice = handler
+    }
+
     private var handle: Long = 0L
 
     /** Native teardown of the previous player, if one is still running. */
@@ -99,6 +126,17 @@ internal class NativePlayerController(
     private var controlsState = PlayerControlsState()
     @Volatile
     private var currentVolumeLevel = rememberedVolumeLevel.coerceDesktopPlayerVolumeLevel()
+    @Volatile
+    private var playbackRequested = true
+    private var onAudioTrackUnplayable: ((Int) -> Unit)? = null
+    private var selectedAudioIndex = -1
+    private var audioStallPosition = Long.MIN_VALUE
+    private var audioStallBuffered = Long.MIN_VALUE
+    private var audioStallAtMs = 0L
+    private var audioStallIgnoreUntilMs = 0L
+    private var audioStallReadySeen = false
+    private var audioStallPlateauCount = 0
+    private var audioStallNotifiedIndex = -1
     private var pendingSubtitleDelayMs: Int? = null
     private var pendingSubtitleStyle: SubtitleStyleState? = null
     private var pendingUseLibass: Boolean = false
@@ -428,9 +466,10 @@ internal class NativePlayerController(
         )
         currentVolumeLevel = stateWithVolume.volumeLevel ?: currentVolumeLevel
         controlsState = stateWithVolume
+        val resolvedState = stateWithVolume.withAuthedOverlayImages(startFetch = false)
         val isFullscreen = isDesktopAppFullscreen(SwingUtilities.getWindowAncestor(host))
         val structureKey = NativeControlsStructureKey(
-            state = stateWithVolume.nativeControlsStructureKey(),
+            state = resolvedState.nativeControlsStructureKey(),
             isFullscreen = isFullscreen,
         )
         val presentationKey = NativeControlsPresentationKey(
@@ -450,7 +489,8 @@ internal class NativePlayerController(
                 "speed=${stateWithVolume.playbackSpeedLabel} audioLabel=${stateWithVolume.audioLabel} " +
                 "subsLabel=${stateWithVolume.subtitlesLabel} fullscreen=$isFullscreen"
         }
-        NativePlayerBridge.updateControls(current, stateWithVolume.toControlsJson(isFullscreen))
+        stateWithVolume.withAuthedOverlayImages(startFetch = true)
+        NativePlayerBridge.updateControls(current, resolvedState.toControlsJson(isFullscreen))
     }
 
     fun onDesktopFullscreenChanged() {
@@ -886,21 +926,25 @@ internal class NativePlayerController(
     }
 
     override fun play() {
+        playbackRequested = true
         log.d { "play handle=$handle" }
         handle.takeIf { it != 0L }?.let { NativePlayerBridge.setPaused(it, false) }
     }
 
     override fun pause() {
+        playbackRequested = false
         log.d { "pause handle=$handle" }
         handle.takeIf { it != 0L }?.let { NativePlayerBridge.setPaused(it, true) }
     }
 
     override fun seekTo(positionMs: Long) {
+        ignoreAudioStallForSeek()
         log.d { "seekTo positionMs=$positionMs handle=$handle" }
         handle.takeIf { it != 0L }?.let { nativeSeekTo(it, positionMs) }
     }
 
     override fun trySeekTo(positionMs: Long): Boolean {
+        ignoreAudioStallForSeek()
         val current = handle.takeIf { it != 0L } ?: return false
         log.d { "trySeekTo positionMs=$positionMs handle=$current" }
         nativeSeekTo(current, positionMs)
@@ -908,6 +952,7 @@ internal class NativePlayerController(
     }
 
     override fun seekBy(offsetMs: Long) {
+        ignoreAudioStallForSeek()
         log.d { "seekBy offsetMs=$offsetMs handle=$handle" }
         handle.takeIf { it != 0L }?.let { NativePlayerBridge.seekBy(it, offsetMs) }
     }
@@ -930,16 +975,41 @@ internal class NativePlayerController(
         handle.takeIf { it != 0L }?.let { NativePlayerBridge.setSpeed(it, speed) }
     }
 
-    override fun getAudioTracks(): List<AudioTrack> =
-        decodeTracks { NativePlayerBridge.audioTracksJson(it) }.map { track ->
-            AudioTrack(
+    override fun getAudioTracks(): List<AudioTrack> {
+        val supportedCodecs = deviceSupportedAudioCodecs()
+        return decodeTracks { NativePlayerBridge.audioTracksJson(it) }.map { track ->
+            val base = AudioTrack(
                 index = track.index,
                 id = track.id,
                 label = track.label,
                 language = track.language.takeUnless(String::isBlank),
                 isSelected = track.selected,
             )
+            base.copy(isSupported = !audioTrackKnownIncompatible(base, supportedCodecs))
+        }.also { tracks ->
+            tracks.firstOrNull { it.isSelected }?.let { selectedAudioIndex = it.index }
         }
+    }
+
+    fun currentDurationMs(): Long = handle.takeIf { it != 0L }?.let(NativePlayerBridge::durationMs) ?: 0L
+
+    override fun runDesktopAudioSyncFallback(
+        subtitleUrl: String,
+        subtitleHeaders: Map<String, String>,
+        contentType: String?,
+        videoId: String?,
+        isStillSelected: () -> Boolean,
+    ): Boolean {
+        val pending = pendingSource ?: return false
+        return audioSyncRunner.start(
+            sourceUrl = pending.sourceUrl,
+            sourceHeaders = pending.headerLines.toHeaderMap(),
+            headerLines = pending.headerLines.toTypedArray(),
+            subtitleUrl = subtitleUrl,
+            subtitleHeaders = subtitleHeaders,
+            isStillSelected = isStillSelected,
+        )
+    }
 
     override fun getSubtitleTracks(): List<SubtitleTrack> =
         decodeTracks { NativePlayerBridge.subtitleTracksJson(it) }.map { track ->
@@ -957,7 +1027,53 @@ internal class NativePlayerController(
             )
         }
 
+    override fun setOnAudioTrackUnplayable(listener: ((Int) -> Unit)?) {
+        onAudioTrackUnplayable = listener
+    }
+
+    fun notePlaybackSnapshot(snapshot: PlayerPlaybackSnapshot) {
+        val listener = onAudioTrackUnplayable ?: return
+        val now = System.currentTimeMillis()
+        if (snapshot.isPlaying) audioStallReadySeen = true
+        if (audioStallPosition == Long.MIN_VALUE || now - audioStallAtMs < AUDIO_STALL_FROZEN_MS) {
+            if (audioStallPosition == Long.MIN_VALUE) rebaseAudioStall(snapshot, now)
+            return
+        }
+        val waiting = snapshot.isLoading || !snapshot.isPlaying
+        val stuck = now >= audioStallIgnoreUntilMs && audioDecoderIsStuck(
+            playWhenReady = playbackRequested,
+            waiting = waiting,
+            positionMs = snapshot.positionMs,
+            bufferedPositionMs = snapshot.bufferedPositionMs,
+            sampledPositionMs = audioStallPosition,
+            sampledBufferedPositionMs = audioStallBuffered,
+            sampleAgeMs = now - audioStallAtMs,
+        )
+        if (stuck) audioStallPlateauCount++ else audioStallPlateauCount = 0
+        rebaseAudioStall(snapshot, now)
+        if (!stuck || (!audioStallReadySeen && audioStallPlateauCount < 3)) return
+        val index = selectedAudioIndex
+        if (index < 0 || index == audioStallNotifiedIndex) return
+        audioStallNotifiedIndex = index
+        listener(index)
+    }
+
+    private fun ignoreAudioStallForSeek() {
+        audioStallIgnoreUntilMs = System.currentTimeMillis() + 1_500L
+        audioStallPosition = Long.MIN_VALUE
+    }
+
+    private fun rebaseAudioStall(snapshot: PlayerPlaybackSnapshot, now: Long) {
+        audioStallPosition = snapshot.positionMs
+        audioStallBuffered = snapshot.bufferedPositionMs
+        audioStallAtMs = now
+    }
+
     override fun selectAudioTrack(index: Int) {
+        if (index != audioStallNotifiedIndex) audioStallNotifiedIndex = -1
+        selectedAudioIndex = index
+        audioStallPosition = Long.MIN_VALUE
+        audioStallPlateauCount = 0
         val current = handle.takeIf { it != 0L } ?: return
         val tracks = decodeTracks { NativePlayerBridge.audioTracksJson(it) }
         val trackId = resolveTrackId(index, tracks) ?: run {
@@ -1075,6 +1191,82 @@ internal class NativePlayerController(
             json.decodeFromString<List<NativeMpvTrack>>(readJson(current))
         }.getOrDefault(emptyList())
     }
+
+    private val overlayImageDataUrls = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val overlayImageFetches = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun PlayerControlsState.withAuthedOverlayImages(startFetch: Boolean): PlayerControlsState {
+        fun map(url: String?): String? {
+            if (url.isNullOrBlank() || !url.needsAuthedOverlayFetch()) return url
+            overlayImageDataUrls[url]?.let { return it }
+            if (startFetch) scheduleOverlayImageFetch(url)
+            return url
+        }
+        return copy(
+            pauseOverlayLogo = map(pauseOverlayLogo),
+            openingArtwork = map(openingArtwork),
+            openingLogo = map(openingLogo),
+            nextEpisodeThumbnail = map(nextEpisodeThumbnail).orEmpty(),
+        )
+    }
+
+    private fun scheduleOverlayImageFetch(url: String) {
+        if (!overlayImageFetches.add(url)) return
+        Thread {
+            val outcome = runCatching { downloadOverlayImage(url) }
+            overlayImageFetches.remove(url)
+            val dataUrl = outcome.getOrNull()
+            if (dataUrl != null) {
+                overlayImageDataUrls[url] = dataUrl
+                SwingUtilities.invokeLater { updateControls(controlsState) }
+            }
+        }.apply {
+            name = "overlay-img"
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun downloadOverlayImage(url: String): String? {
+        val token = ApachiyAddonAuth.currentAccessToken()?.takeIf { it.isNotBlank() } ?: return null
+        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        conn.instanceFollowRedirects = true
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            conn.disconnect()
+            error("http $code")
+        }
+        val type = conn.contentType?.substringBefore(';')?.trim()?.takeIf { it.startsWith("image/") }
+            ?: "image/jpeg"
+        val buffer = java.io.ByteArrayOutputStream()
+        val chunk = ByteArray(8192)
+        var total = 0
+        conn.inputStream.use { input ->
+            while (true) {
+                val read = input.read(chunk)
+                if (read < 0) break
+                total += read
+                if (total > 2_000_000) {
+                    conn.disconnect()
+                    return null
+                }
+                buffer.write(chunk, 0, read)
+            }
+        }
+        conn.disconnect()
+        if (buffer.size() == 0) return null
+        val encoded = java.util.Base64.getEncoder().encodeToString(buffer.toByteArray())
+        return "data:$type;base64,$encoded"
+    }
+}
+
+private fun String.needsAuthedOverlayFetch(): Boolean {
+    if (!contains("/metadata/img")) return false
+    val host = runCatching { java.net.URI(this).host }.getOrNull().orEmpty()
+    return ApachiyAddonAuth.shouldAttachAuth(host, ApachiyAddonAuth.hostFromBaseUrl(ApachiyConfig.API_BASE_URL))
 }
 
 private fun String.toPlaybackLogKey(): String {

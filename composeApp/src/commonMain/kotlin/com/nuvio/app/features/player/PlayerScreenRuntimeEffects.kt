@@ -86,6 +86,7 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         val existingOriginal = resolvePlaybackContentOriginalLanguage()
         if (existingOriginal != null) return@LaunchedEffect
         val resolved = ensurePlaybackContentOriginalLanguageResolved() ?: return@LaunchedEffect
+        if (userPinnedAudio) return@LaunchedEffect
         preferredAudioSelectionApplied = false
         if (playerController != null && !playbackSnapshot.isLoading) {
             refreshTracks()
@@ -132,6 +133,11 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         speedBoostRestoreSpeed = null
         playbackContentOriginalLanguage = null
         preferredAudioSelectionApplied = false
+        userPinnedAudio = false
+        unsupportedAudioTrackName = null
+        rejectedAudioIndices.clear()
+        manualAudioSelectionIndex = -1
+        audioIndexBeforeManual = -1
         preferredSubtitleSelectionApplied = false
         isUserExplicitSubtitleSelection = false
         hasScannedTextTracksOnce = false

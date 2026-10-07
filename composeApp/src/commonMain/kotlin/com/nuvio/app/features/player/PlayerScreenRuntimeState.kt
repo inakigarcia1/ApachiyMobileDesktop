@@ -261,6 +261,11 @@ internal class PlayerScreenRuntime(
     var useCustomSubtitles by mutableStateOf(false)
     var playbackContentOriginalLanguage by mutableStateOf<String?>(null)
     var preferredAudioSelectionApplied by mutableStateOf(false)
+    var userPinnedAudio by mutableStateOf(false)
+    var unsupportedAudioTrackName by mutableStateOf<String?>(null)
+    val rejectedAudioIndices = mutableSetOf<Int>()
+    var manualAudioSelectionIndex = -1
+    var audioIndexBeforeManual = -1
     var preferredSubtitleSelectionApplied by mutableStateOf(false)
     var activeSubtitleTab by mutableStateOf(SubtitleTab.BuiltIn)
     var isUserExplicitSubtitleSelection by mutableStateOf(false)

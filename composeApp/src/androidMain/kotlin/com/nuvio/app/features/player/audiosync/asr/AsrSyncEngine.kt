@@ -10,11 +10,6 @@ import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Speech recogniser returning (seconds from segment start, word) pairs. */
-internal fun interface SpeechToText {
-    fun transcribe(samples: FloatArray): List<Pair<Double, String>>
-}
-
 /** A same-language (English) subtitle the heard words can be matched against. */
 internal class ReferenceSubtitle(
     val key: String,

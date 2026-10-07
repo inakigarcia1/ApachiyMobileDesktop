@@ -75,7 +75,9 @@ internal fun buildSubtitleSelectionOptions(
     if (languageKey == SubtitleOffLanguageKey) return emptyList()
 
     val builtInOptions = subtitleTracks
-        .filter { it.subtitleLanguageKey() == languageKey }
+        .filter { track ->
+            track.subtitleLanguageKey() == languageKey && !track.isApachiyAutoSyncSidecar()
+        }
         .map { SubtitleSelectionOption.BuiltIn(it) }
     val seenAddonIds = mutableSetOf<String>()
     val addonOptions = addonSubtitles
@@ -136,6 +138,11 @@ internal fun subtitleLanguageKey(language: String?): String {
         "pt-br", "es-419" -> normalized
         else -> normalized.substringBefore('-').ifBlank { SubtitleUnknownLanguageKey }
     }
+}
+
+private fun SubtitleTrack.isApachiyAutoSyncSidecar(): Boolean {
+    val haystack = listOf(label, id).joinToString(" ").lowercase()
+    return haystack.contains("apachiy-autosync")
 }
 
 private fun SubtitleTrack.subtitleLanguageKey(): String {

@@ -506,6 +506,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                     }
                 },
                 onControllerReady = { controller ->
+                    controller.setOnAudioTrackUnplayable { index -> onAudioTrackUnplayable(index) }
+                    controller.setAutoSyncNoticeHandler { message -> showAutoSyncNotice(message) }
                     playerController = controller.takeIf { sourceAvailable }
                     playerLifecycleController = controller
                     playerControllerSourceUrl = surfaceSource?.sourceUrl
@@ -977,9 +979,7 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             playerControlsLog.d {
                 "selectAudioTrack id=$requestedId index=$index tracks=${audioTracks.size} ${playerControlLogContext()}"
             }
-            selectedAudioIndex = index
-            persistAudioPreference(audioTracks.firstOrNull { it.index == index })
-            playerController?.selectAudioTrack(index)
+            selectAudioTrackFromUser(index)
         }
         "fetchAddonSubtitles" -> fetchAddonSubtitlesForActiveItem()
         "selectAddonSubtitle" -> {
@@ -1674,16 +1674,21 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
         showAudioModal = showAudioModal,
         audioTracks = audioTracks,
         selectedAudioIndex = selectedAudioIndex,
+        unsupportedAudioTrackName = unsupportedAudioTrackName,
         onAudioTrackSelected = { index ->
-            selectedAudioIndex = index
-            persistAudioPreference(audioTracks.firstOrNull { it.index == index })
-            playerController?.selectAudioTrack(index)
-            scope.launch {
-                kotlinx.coroutines.delay(200)
-                showAudioModal = false
+            if (selectAudioTrackFromUser(index)) {
+                scope.launch {
+                    kotlinx.coroutines.delay(200)
+                    if (selectedAudioIndex == index && unsupportedAudioTrackName == null) {
+                        showAudioModal = false
+                    }
+                }
             }
         },
-        onAudioModalDismissed = { showAudioModal = false },
+        onAudioModalDismissed = {
+            unsupportedAudioTrackName = null
+            showAudioModal = false
+        },
         showSubtitleModal = showSubtitleModal,
         subtitleTracks = subtitleTracks,
         selectedSubtitleIndex = selectedSubtitleIndex,

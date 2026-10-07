@@ -7,6 +7,8 @@ import kotlinx.coroutines.launch
 
 internal expect object TorboxSpeedTestHarness {
     fun readSample(): TorboxSpeedSample?
+    fun readPinnedMbps(): Double?
+    fun setPinnedMbps(mbps: Double?)
     fun readStoredNetworkSignature(): String?
     suspend fun measure(): TorboxSpeedSample?
     fun currentNetworkSignature(): String?

@@ -306,16 +306,27 @@ object ProfileRepository {
             persist()
             return
         }
+        val profile = _state.value.profiles.firstOrNull { it.profileIndex == profileIndex }
+        val profileRowId = profile?.id?.toLongOrNull()
+        if (profileRowId == null) {
+            log.e { "Cannot delete profile $profileIndex: missing row id ${profile?.id}" }
+            return
+        }
         try {
             val params = buildJsonObject {
-                put("p_profile_id", profileIndex)
-                putSyncOriginClientId()
+                put("p_profile_id", profileRowId)
             }
-            SupabaseProvider.client.postgrest.rpc("sync_delete_profile_data", params)
+            val deleted = SupabaseProvider.client.postgrest
+                .rpc("sync_delete_profile_data", params)
+                .decodeAs<Boolean>()
+            if (!deleted) {
+                log.e { "Profile delete RPC returned false for row id $profileRowId (index $profileIndex)" }
+                return
+            }
             pullProfiles()
         } catch (e: Throwable) {
             if (AuthRepository.signOutIfSessionInvalid(e, "Profile delete")) return
-            log.e(e) { "Failed to delete profile $profileIndex" }
+            log.e(e) { "Failed to delete profile $profileIndex (row id $profileRowId)" }
         }
     }
 

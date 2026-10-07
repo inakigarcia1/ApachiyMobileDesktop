@@ -137,6 +137,24 @@ private val GENERIC_AUDIO_COMPATIBILITY = listOf(
     "aac", "mp3", "opus", "vorbis", "ac3", "eac3", "flac", "dts", "dtsx", "dtshd", "truehd", "atmos",
 )
 
+internal const val AUDIO_STALL_BUFFER_AHEAD_MS = 2_500L
+internal const val AUDIO_STALL_FROZEN_MS = 700L
+
+/** Decoder is eating a full buffer and not moving the playhead. Network waits keep filling the buffer. */
+internal fun audioDecoderIsStuck(
+    playWhenReady: Boolean,
+    waiting: Boolean,
+    positionMs: Long,
+    bufferedPositionMs: Long,
+    sampledPositionMs: Long,
+    sampledBufferedPositionMs: Long,
+    sampleAgeMs: Long,
+): Boolean {
+    if (!playWhenReady || !waiting || sampleAgeMs < AUDIO_STALL_FROZEN_MS) return false
+    if (positionMs != sampledPositionMs || bufferedPositionMs != sampledBufferedPositionMs) return false
+    return bufferedPositionMs - positionMs >= AUDIO_STALL_BUFFER_AHEAD_MS
+}
+
 internal fun audioTrackKnownIncompatible(track: AudioTrack, supportedAudioCodecs: Set<String>?): Boolean {
     if (supportedAudioCodecs == null) return false
     val key = audioCodecKeyFromLabel(track.label) ?: return false
@@ -151,7 +169,7 @@ internal fun originalAudioHasNoPlayableTrack(
 ): Boolean {
     if (supportedAudioCodecs == null || tracks.isEmpty()) return false
     val pool = tracks.filter { !isUndesirableAudioTrack(it) }.ifEmpty { tracks }
-    return pool.all { audioTrackKnownIncompatible(it, supportedAudioCodecs) }
+    return pool.all { !it.isSupported || audioTrackKnownIncompatible(it, supportedAudioCodecs) }
 }
 
 private fun genericAudioCompatibilityRank(track: AudioTrack): Int {
@@ -165,7 +183,7 @@ internal fun findPreferredOriginalAudioTrackIndex(
     contentOriginalLanguage: String?,
     supportedAudioCodecs: Set<String>? = null,
 ): Int {
-    val eligible = tracks.filter { !isUndesirableAudioTrack(it) }
+    val eligible = tracks.filter { !isUndesirableAudioTrack(it) && it.isSupported }
     if (eligible.isEmpty()) return -1
     val playable = if (supportedAudioCodecs == null) {
         eligible

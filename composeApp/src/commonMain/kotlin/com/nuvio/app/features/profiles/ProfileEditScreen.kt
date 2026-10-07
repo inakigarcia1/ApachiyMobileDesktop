@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,8 +25,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.nuvio.app.isDesktop
 import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import com.nuvio.app.core.ui.NuvioDropdownChip
 import com.nuvio.app.core.ui.NuvioDropdownOption
@@ -89,9 +85,6 @@ fun ProfileEditScreen(
     var avatarUrl by rememberSaveable { mutableStateOf(currentProfile?.avatarUrl.orEmpty()) }
     var selectedBackgroundId by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundId) }
     var selectedBackgroundUrl by rememberSaveable { mutableStateOf(currentProfile?.profileBackgroundUrl) }
-    val primaryAddonsLockedOn = !isDesktop
-    var usesPrimaryAddons by rememberSaveable { mutableStateOf(currentProfile?.usesPrimaryAddons ?: false) }
-    val effectiveUsesPrimaryAddons = if (primaryAddonsLockedOn) true else usesPrimaryAddons
     var isSaving by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showPinSetup by remember { mutableStateOf(false) }
@@ -125,7 +118,6 @@ fun ProfileEditScreen(
     val previewAccent = remember(visibleAvatarItem, fallbackColorHex) {
         parseHexColor(visibleAvatarItem?.bgColor ?: fallbackColorHex)
     }
-    val compactAvatarPicker = !isDesktop
     val avatarCategories = remember(avatars) { avatars.map { it.category }.distinct() }
     var selectedAvatarCategory by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(avatars, selectedAvatarId, avatarCategories) {
@@ -137,12 +129,9 @@ fun ProfileEditScreen(
                 selectedAvatarCategory = avatarCategories.firstOrNull()
         }
     }
-    val avatarsInSelectedCategory = remember(avatars, selectedAvatarCategory, compactAvatarPicker) {
-        if (!compactAvatarPicker || selectedAvatarCategory == null) {
-            avatars
-        } else {
-            avatars.filter { it.category == selectedAvatarCategory }
-        }
+    val avatarsInSelectedCategory = remember(avatars, selectedAvatarCategory) {
+        if (selectedAvatarCategory == null) avatars
+        else avatars.filter { it.category == selectedAvatarCategory }
     }
     val listState = rememberLazyListState()
 
@@ -161,20 +150,14 @@ fun ProfileEditScreen(
         item {
             ProfileIdentityCard(
                 name = name,
-                isNew = isNew,
-                profileIndex = currentProfile?.profileIndex,
-                usesPrimaryAddons = effectiveUsesPrimaryAddons,
-                showPrimaryAddonsOption = !primaryAddonsLockedOn,
                 onNameChange = { name = it },
-                onUsesPrimaryAddonsChange = { usesPrimaryAddons = it },
                 selectedAvatar = visibleAvatarItem,
                 customAvatarUrl = customAvatarUrl,
                 accentColor = previewAccent,
-                hasAvatarChoices = avatars.isNotEmpty(),
             )
         }
 
-        if (compactAvatarPicker && !isNew) {
+        if (!isNew) {
             item {
                 ProfileEditSecuritySection(
                     pinEnabled = currentProfile?.pinEnabled == true,
@@ -184,42 +167,40 @@ fun ProfileEditScreen(
             }
         }
 
-        if (compactAvatarPicker) {
-            item {
-                ProfileEditSaveSection(
-                    isNew = isNew,
-                    isSaving = isSaving,
-                    enabled = name.isNotBlank() && !avatarUrlIsInvalid && !isSaving,
-                    onSave = {
-                        isSaving = true
-                        scope.launch {
-                            val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
-                            if (isNew) {
-                                ProfileRepository.createProfile(
-                                    name = name,
-                                    avatarColorHex = avatarColorHex,
-                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
-                                    avatarUrl = customAvatarUrl,
-                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
-                                )
-                            } else {
-                                ProfileRepository.updateProfile(
-                                    profileIndex = currentProfile!!.profileIndex,
-                                    name = name,
-                                    avatarColorHex = avatarColorHex,
-                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
-                                    avatarUrl = customAvatarUrl,
-                                    profileBackgroundId = selectedBackgroundId,
-                                    profileBackgroundUrl = selectedBackgroundUrl,
-                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
-                                )
-                            }
-                            isSaving = false
-                            onSaved()
+        item {
+            ProfileEditSaveSection(
+                isNew = isNew,
+                isSaving = isSaving,
+                enabled = name.isNotBlank() && !avatarUrlIsInvalid && !isSaving,
+                onSave = {
+                    isSaving = true
+                    scope.launch {
+                        val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
+                        if (isNew) {
+                            ProfileRepository.createProfile(
+                                name = name,
+                                avatarColorHex = avatarColorHex,
+                                avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
+                                avatarUrl = customAvatarUrl,
+                                usesPrimaryAddons = true,
+                            )
+                        } else {
+                            ProfileRepository.updateProfile(
+                                profileIndex = currentProfile!!.profileIndex,
+                                name = name,
+                                avatarColorHex = avatarColorHex,
+                                avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
+                                avatarUrl = customAvatarUrl,
+                                profileBackgroundId = selectedBackgroundId,
+                                profileBackgroundUrl = selectedBackgroundUrl,
+                                usesPrimaryAddons = true,
+                            )
                         }
-                    },
-                )
-            }
+                        isSaving = false
+                        onSaved()
+                    }
+                },
+            )
         }
 
         if (canChooseBackground) {
@@ -261,7 +242,7 @@ fun ProfileEditScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
 
-                    if (compactAvatarPicker && avatarCategories.isNotEmpty()) {
+                    if (avatarCategories.isNotEmpty()) {
                         NuvioDropdownChip(
                             title = stringResource(Res.string.profile_select_avatar_category),
                             label = selectedAvatarCategory?.let(::avatarCategoryDisplayName)
@@ -299,11 +280,6 @@ fun ProfileEditScreen(
                                             avatarUrl = ""
                                             selectedAvatarId = avatar.id
                                             selectedAvatarCategory = avatar.category
-                                            if (compactAvatarPicker) {
-                                                scope.launch {
-                                                    listState.animateScrollToItem(1)
-                                                }
-                                            }
                                         },
                                     )
                                 }
@@ -311,54 +287,6 @@ fun ProfileEditScreen(
                         }
                     }
                 }
-            }
-        }
-
-        if (!compactAvatarPicker && !isNew) {
-            item {
-                ProfileEditSecuritySection(
-                    pinEnabled = currentProfile?.pinEnabled == true,
-                    onSetPin = { showPinSetup = true },
-                    onRemovePin = { showPinClear = true },
-                )
-            }
-        }
-
-        if (!compactAvatarPicker) {
-            item {
-                ProfileEditSaveSection(
-                    isNew = isNew,
-                    isSaving = isSaving,
-                    enabled = name.isNotBlank() && !avatarUrlIsInvalid && !isSaving,
-                    onSave = {
-                        isSaving = true
-                        scope.launch {
-                            val avatarColorHex = visibleAvatarItem?.bgColor ?: fallbackColorHex
-                            if (isNew) {
-                                ProfileRepository.createProfile(
-                                    name = name,
-                                    avatarColorHex = avatarColorHex,
-                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
-                                    avatarUrl = customAvatarUrl,
-                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
-                                )
-                            } else {
-                                ProfileRepository.updateProfile(
-                                    profileIndex = currentProfile!!.profileIndex,
-                                    name = name,
-                                    avatarColorHex = avatarColorHex,
-                                    avatarId = if (customAvatarUrl == null) selectedAvatarId else null,
-                                    avatarUrl = customAvatarUrl,
-                                    profileBackgroundId = selectedBackgroundId,
-                                    profileBackgroundUrl = selectedBackgroundUrl,
-                                    usesPrimaryAddons = effectiveUsesPrimaryAddons,
-                                )
-                            }
-                            isSaving = false
-                            onSaved()
-                        }
-                    },
-                )
             }
         }
 
@@ -497,16 +425,10 @@ private fun ProfileEditSaveSection(
 @Composable
 private fun ProfileIdentityCard(
     name: String,
-    isNew: Boolean,
-    profileIndex: Int?,
-    usesPrimaryAddons: Boolean,
-    showPrimaryAddonsOption: Boolean,
     onNameChange: (String) -> Unit,
-    onUsesPrimaryAddonsChange: (Boolean) -> Unit,
     selectedAvatar: AvatarCatalogItem?,
     customAvatarUrl: String?,
     accentColor: Color,
-    hasAvatarChoices: Boolean,
 ) {
     NuvioSurfaceCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -568,56 +490,13 @@ private fun ProfileIdentityCard(
                     }
                 }
 
-                Column(
+                Text(
+                    text = name.ifBlank { stringResource(Res.string.profile_unnamed) },
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = name.ifBlank {
-                            if (isNew) stringResource(Res.string.profile_new)
-                            else stringResource(Res.string.profile_unnamed)
-                        },
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = buildList {
-                            add(
-                                if (isNew) {
-                                    stringResource(Res.string.profile_new)
-                                } else {
-                                    profileIndex?.let { stringResource(Res.string.profile_label_number, it) }
-                                        ?: stringResource(Res.string.profile_unnamed)
-                                },
-                            )
-                            if (showPrimaryAddonsOption) {
-                                add(
-                                    if (usesPrimaryAddons) {
-                                        stringResource(Res.string.profile_primary_addons_on)
-                                    } else {
-                                        stringResource(Res.string.profile_primary_addons_off)
-                                    },
-                                )
-                            }
-                        }.joinToString("  |  "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = when {
-                            customAvatarUrl != null -> stringResource(Res.string.profile_custom_avatar_selected)
-                            selectedAvatar != null -> stringResource(
-                                Res.string.profile_avatar_selected,
-                                selectedAvatar.displayName,
-                            )
-                            hasAvatarChoices -> stringResource(Res.string.profile_choose_avatar_below)
-                            else -> stringResource(Res.string.profile_avatar_options_pending)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             NuvioInputField(
@@ -625,15 +504,6 @@ private fun ProfileIdentityCard(
                 onValueChange = onNameChange,
                 placeholder = stringResource(Res.string.profile_name_placeholder),
             )
-
-            if (showPrimaryAddonsOption) {
-                ProfileOptionRow(
-                    title = stringResource(Res.string.profile_use_primary_addons),
-                    description = stringResource(Res.string.profile_use_primary_addons_description),
-                    checked = usesPrimaryAddons,
-                    onCheckedChange = onUsesPrimaryAddonsChange,
-                )
-            }
         }
     }
 }
@@ -686,48 +556,6 @@ private fun AvatarChoiceItem(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ProfileOptionRow(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
-            ),
-        )
     }
 }
 

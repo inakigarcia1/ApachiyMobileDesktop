@@ -49,6 +49,10 @@ internal actual object TorboxSpeedTestHarness {
         return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
     }
 
+    actual fun readPinnedMbps(): Double? = null
+
+    actual fun setPinnedMbps(mbps: Double?) = Unit
+
     actual fun readSample(): TorboxSpeedSample? {
         val prefs = appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE) ?: return null
         val speed = prefs.getFloat(KEY_SPEED, -1f).toDouble()

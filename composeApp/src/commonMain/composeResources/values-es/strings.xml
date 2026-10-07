@@ -367,6 +367,7 @@
     <string name="compose_player_no_subtitle_lines_found">No se encontraron líneas de subtítulos</string>
     <string name="compose_player_subtitle_lines_load_error">No se pueden cargar líneas de subtítulos</string>
     <string name="compose_player_no_audio_tracks_available">No hay pistas de audio disponibles</string>
+    <string name="compose_player_audio_track_unsupported">La pista de audio «%1$s» no es soportada por tu dispositivo. Por favor, elija otra.</string>
     <string name="compose_player_no_episodes_available">No hay episodios disponibles</string>
     <string name="compose_player_no_streams_found">No se encontraron streams</string>
     <string name="compose_player_none">Ninguno</string>

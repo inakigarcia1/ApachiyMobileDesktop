@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.nuvio
 import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.compose_player_audio_track_unsupported
 import nuvio.composeapp.generated.resources.compose_player_audio_tracks
 import nuvio.composeapp.generated.resources.compose_player_no_audio_tracks_available
 import org.jetbrains.compose.resources.stringResource
@@ -40,6 +41,7 @@ fun AudioTrackModal(
     visible: Boolean,
     audioTracks: List<AudioTrack>,
     selectedIndex: Int,
+    unsupportedAudioTrackName: String? = null,
     onTrackSelected: (Int) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -67,6 +69,17 @@ fun AudioTrackModal(
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
+                if (unsupportedAudioTrackName != null) {
+                    Text(
+                        text = stringResource(
+                            Res.string.compose_player_audio_track_unsupported,
+                            unsupportedAudioTrackName,
+                        ),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
 
                 if (audioTracks.isEmpty()) {
                     Text(

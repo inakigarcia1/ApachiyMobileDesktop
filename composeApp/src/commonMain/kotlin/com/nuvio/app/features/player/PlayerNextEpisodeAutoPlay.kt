@@ -64,12 +64,6 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                     settings.streamAutoPlayPreferBingeGroup
                 )
 
-    val bingeGroupOnlyManualMode =
-        shouldAutoSelectInManualMode &&
-            (!settings.streamAutoPlayNextEpisodeEnabled ||
-                !settings.streamAutoPlayNextEpisodeFallbackEnabled) &&
-            settings.streamAutoPlayPreferBingeGroup
-
     val effectiveMode = if (shouldAutoSelectInManualMode) {
         StreamAutoPlayMode.FIRST_STREAM
     } else {
@@ -149,7 +143,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                 selectedPlugins = effectiveSelectedPlugins,
                 preferredBingeGroup = preferredBingeGroup,
                 preferBingeGroupInSelection = settings.streamAutoPlayPreferBingeGroup,
-                bingeGroupOnly = bingeGroupOnlyManualMode,
+                bingeGroupOnly = false,
                 debridEnabled = debridSettings.canResolvePlayableLinks,
                 activeResolverProviderId = debridSettings.activeResolverProviderId,
             )
@@ -217,12 +211,10 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
                 delay(1000)
             }
             onEpisodeStreamSelected(selected, nextVideo)
-            onNextEpisodeCardVisibleChanged(false)
             onCountdownChanged(null)
             onSourceNameChanged(null)
         } else {
             onManualSelectionRequired(nextVideo)
-            onNextEpisodeCardVisibleChanged(false)
         }
     }
 }

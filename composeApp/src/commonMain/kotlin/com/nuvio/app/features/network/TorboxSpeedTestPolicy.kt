@@ -32,6 +32,7 @@ object TorboxSpeedTestPolicy {
         force: Boolean,
     ): Boolean {
         if (force) return true
+        if (sample?.connectionType == "pinned") return false
         if (sample == null || !sample.isValid()) return true
         if (nowEpochMs - sample.measuredAtEpochMs >= STALE_AFTER_MS) return true
         if (

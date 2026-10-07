@@ -2469,17 +2469,6 @@ internal data class AutoSyncResolvedTimeline(
     val reference: AutoSyncReferenceIdentity,
 )
 
-internal data class ReferenceTrack(
-    val key: String,
-    val language: String?,
-    val cues: List<SubtitleSyncCue>,
-    val label: String? = null,
-    val selectionFlags: Int = 0,
-    val roleFlags: Int = 0,
-    val generation: Long = 0L,
-    val estimatedEndStartsMs: Set<Long> = emptySet(),
-)
-
 /** Thread-safe accumulation of the embedded text timing already passing through Media3. */
 internal object EmbeddedSubtitleCueStore {
     private const val SEEK_DEDUP_WINDOW_MS = 1_500L

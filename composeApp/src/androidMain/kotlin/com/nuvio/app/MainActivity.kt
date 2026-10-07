@@ -91,6 +91,7 @@ open class MainActivity : AppCompatActivity() {
         AddonStorage.initialize(applicationContext)
         PlaybackCapabilitiesProvider.initialize(applicationContext)
         com.nuvio.app.features.network.TorboxSpeedTestHarness.initialize(applicationContext)
+        com.nuvio.app.features.player.audiosync.SileroVadWeightsSource.initialize(applicationContext)
         AuthStorage.initialize(applicationContext)
         ServerConfigurationStorage.initialize(applicationContext)
         LibraryStorage.initialize(applicationContext)

@@ -40,6 +40,10 @@ internal actual object TorboxSpeedTestHarness {
 
     actual fun initializePlatform() = Unit
 
+    actual fun readPinnedMbps(): Double? = null
+
+    actual fun setPinnedMbps(mbps: Double?) = Unit
+
     actual fun readSample(): TorboxSpeedSample? {
         val defaults = NSUserDefaults.standardUserDefaults
         val speed = defaults.doubleForKey("${defaultsPrefix}speed")

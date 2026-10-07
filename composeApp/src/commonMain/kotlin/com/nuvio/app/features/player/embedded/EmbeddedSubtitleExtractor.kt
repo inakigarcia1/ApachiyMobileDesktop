@@ -3,6 +3,11 @@ package com.nuvio.app.features.player.embedded
 import com.nuvio.app.features.addons.httpGetBytesWithHeaders
 import com.nuvio.app.features.addons.httpRequestRaw
 import com.nuvio.app.features.addons.readLocalFilePrefix
+import com.nuvio.app.features.autosync.IndexedPgsReference
+import com.nuvio.app.features.autosync.PgsCueLocator
+import com.nuvio.app.features.autosync.PgsCueSemanticParser
+import com.nuvio.app.features.autosync.PgsReferenceResolution
+import com.nuvio.app.features.autosync.PgsSegmentProbe
 import com.nuvio.app.features.player.agentqa.AgentQa
 import kotlin.time.TimeSource
 import kotlinx.coroutines.async
@@ -550,10 +555,11 @@ internal object EmbeddedSubtitleExtractor {
         if (tracks.isEmpty()) {
             return DialogueTimingIndex(noSubtitleTracks = layout.tracksOffset != null || prefix.size >= 64)
         }
-        val textTracks = tracks.filter { it.codec != EmbeddedTextCodec.Pgs }
-        if (hasEmbeddedSpanishTextTrack(textTracks)) {
+        if (hasEmbeddedSpanishTextTrack(tracks)) {
+            val textTracks = tracks.filter { it.codec != EmbeddedTextCodec.Pgs }
             return DialogueTimingIndex(hasEmbeddedSpanish = true, tracks = textTracks)
         }
+        val textTracks = tracks.filter { it.codec != EmbeddedTextCodec.Pgs }
         val cuesOffset = layout.cuesOffset ?: return DialogueTimingIndex(tracks = textTracks)
         val cuesBytes = readFullCues(sourceUrl, headers, prefix, cuesOffset, null)
             ?: return DialogueTimingIndex(tracks = textTracks)
@@ -577,6 +583,9 @@ internal object EmbeddedSubtitleExtractor {
                     estimatedCueEnds = false,
                 )
             }
+        }
+        if (timedPgs.isEmpty()) {
+            return DialogueTimingIndex(noSubtitleTracks = true)
         }
         return DialogueTimingIndex(tracks = timedPgs)
     }
@@ -648,6 +657,100 @@ internal object EmbeddedSubtitleExtractor {
         if (data.size < 8) return false
         val type = data.decodeToString(4, 8)
         return type == "ftyp" || type == "moov" || type == "mdat"
+    }
+
+    private const val PGS_SEMANTIC_MAX_CUES = 96
+    private const val PGS_CLUSTER_READ_BYTES = 320 * 1024
+    private const val PGS_BLOCK_READ_BYTES = 32 * 1024
+
+    /**
+     * When Cues-only PGS phase tracks fail AutoSync, fetch each indexed PGS block and build a
+     * semantic visibility timeline (PCS/PDS/ODS/WDS), same approach as Android Exo AutoSync.
+     */
+    suspend fun loadPgsSemanticDialogueTiming(
+        sourceUrl: String,
+        headers: Map<String, String>,
+    ): DialogueTimingIndex? {
+        val trimmed = sourceUrl.trim()
+        if (!trimmed.startsWith("http://", ignoreCase = true) &&
+            !trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            return null
+        }
+        val prefix = readMediaRange(trimmed, headers, 0L, PREFIX_BYTES) ?: return null
+        if (!looksLikeMkv(prefix)) return null
+        val layout = MkvTextSubtitleParser.parseLayout(prefix)
+        var tracks = layout.tracks
+        if (layout.tracksOffset != null) {
+            val tracksBytes = readMediaRange(trimmed, headers, layout.tracksOffset, TRACKS_BYTES)
+            if (tracksBytes != null) {
+                tracks = mergeTrackMetadata(tracks, MkvTextSubtitleParser.parseTracksElement(tracksBytes))
+            }
+        }
+        val pgsTracks = tracks.filter { it.codec == EmbeddedTextCodec.Pgs }
+        if (pgsTracks.isEmpty()) return null
+        val cuesOffset = layout.cuesOffset ?: return null
+        val cuesBytes = readFullCues(trimmed, headers, prefix, cuesOffset, null) ?: return null
+        val refs = MkvTextSubtitleParser.parseCues(cuesBytes)
+        if (refs.isEmpty()) return null
+        val scale = layout.timestampScale.coerceAtLeast(1L)
+        val semanticTracks = ArrayList<EmbeddedTextTrack>()
+        for (track in pgsTracks) {
+            val trackRefs = refs
+                .filter { it.trackNumber == track.trackNumber }
+                .sortedBy { it.timeTicks }
+            if (trackRefs.size < 8) continue
+            val locators = trackRefs.map { ref ->
+                val startMs = ref.timeTicks * scale / 1_000_000L
+                PgsCueLocator(
+                    startTimeMs = startMs,
+                    cueTimeTicks = ref.timeTicks,
+                    durationMs = null,
+                    clusterPosition = ref.clusterPosition,
+                    relativePosition = ref.relativePosition,
+                    blockNumber = null,
+                )
+            }.take(PGS_SEMANTIC_MAX_CUES)
+            val reference = IndexedPgsReference(
+                key = "pgs-semantic:${track.trackNumber}",
+                language = track.language,
+                label = track.name,
+                selectionFlags = 0,
+                roleFlags = 0,
+                trackNumber = track.trackNumber.toInt(),
+                segmentDataStart = layout.segmentDataOffset,
+                timestampScaleNs = scale,
+                cues = locators,
+            )
+            val probes = ArrayList<PgsSegmentProbe>(locators.size)
+            for ((index, locator) in locators.withIndex()) {
+                val clusterStart = layout.segmentDataOffset + locator.clusterPosition
+                val clusterBytes = readMediaRange(trimmed, headers, clusterStart, PGS_CLUSTER_READ_BYTES)
+                    ?: continue
+                val cluster = PgsCueSemanticParser.parseClusterWindow(reference, clusterStart, clusterBytes)
+                    .getOrNull() ?: continue
+                val blockPos = PgsCueSemanticParser.blockPosition(locator, cluster).getOrNull() ?: continue
+                val blockStart = (blockPos - 4L).coerceAtLeast(clusterStart)
+                val blockBytes = readMediaRange(trimmed, headers, blockStart, PGS_BLOCK_READ_BYTES) ?: continue
+                val probe = PgsCueSemanticParser.parseSegmentWindow(
+                    reference = reference,
+                    locator = locator,
+                    cluster = cluster,
+                    bytes = blockBytes,
+                    cueIndex = index,
+                ).getOrNull() ?: continue
+                probes += probe
+            }
+            if (probes.size != locators.size) continue
+            val resolution = PgsCueSemanticParser.buildTimeline(reference, probes)
+            val ready = resolution as? PgsReferenceResolution.Ready ?: continue
+            val cues = ready.track.cues.map { cue ->
+                EmbeddedSubtitleCue(cue.startTimeMs, cue.endTimeMs, "")
+            }
+            if (cues.size < 8) continue
+            semanticTracks += track.copy(cues = cues, estimatedCueEnds = false)
+        }
+        return semanticTracks.takeIf { it.isNotEmpty() }?.let { DialogueTimingIndex(tracks = it) }
     }
 }
 

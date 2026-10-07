@@ -35,15 +35,18 @@ actual object AppUpdaterPlatform {
     private val currentOs: DesktopUpdaterOs = DesktopUpdaterOs.current()
     private val store = DesktopStorage.store(desktopUpdaterPreferencesName)
     actual val isDebugBuild: Boolean = run {
-        when (System.getProperty("compose.application.is.packaged")?.lowercase()) {
-            "true" -> false
-            "false" -> true
-            else -> {
-                // Gradle `:composeApp:run` and IDE runs set resources.dir under build/; MSI installs do not.
-                val resourcesDir = System.getProperty("compose.application.resources.dir").orEmpty()
-                resourcesDir.isBlank() ||
-                    resourcesDir.contains("build${File.separatorChar}compose", ignoreCase = true) ||
-                    resourcesDir.contains("build/compose", ignoreCase = true)
+        when (System.getProperty("apachiy.desktop.debugBuild")?.lowercase()) {
+            "true", "1" -> true
+            "false", "0" -> false
+            else -> when (System.getProperty("compose.application.is.packaged")?.lowercase()) {
+                "true" -> false
+                "false" -> true
+                else -> {
+                    val resourcesDir = System.getProperty("compose.application.resources.dir").orEmpty()
+                    resourcesDir.isBlank() ||
+                        resourcesDir.contains("build${File.separatorChar}compose", ignoreCase = true) ||
+                        resourcesDir.contains("build/compose", ignoreCase = true)
+                }
             }
         }
     }

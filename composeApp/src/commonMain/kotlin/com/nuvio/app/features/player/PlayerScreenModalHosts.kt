@@ -22,6 +22,7 @@ internal fun PlayerScreenModalHosts(
     showAudioModal: Boolean,
     audioTracks: List<AudioTrack>,
     selectedAudioIndex: Int,
+    unsupportedAudioTrackName: String?,
     onAudioTrackSelected: (Int) -> Unit,
     onAudioModalDismissed: () -> Unit,
     showSubtitleModal: Boolean,
@@ -118,6 +119,7 @@ internal fun PlayerScreenModalHosts(
         visible = showAudioModal,
         audioTracks = audioTracks,
         selectedIndex = selectedAudioIndex,
+        unsupportedAudioTrackName = unsupportedAudioTrackName,
         onTrackSelected = onAudioTrackSelected,
         onDismiss = onAudioModalDismissed,
     )

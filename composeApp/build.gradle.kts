@@ -594,6 +594,18 @@ val desktopSentryResourceDir = rootProject.layout.projectDirectory.dir("desktopS
 val requestedGradleTasks = gradle.startParameter.taskNames.map { taskName ->
     taskName.substringAfterLast(':').lowercase()
 }
+val desktopDebugRunTasks = setOf(
+    "run",
+    "desktoprun",
+    "hotrundesktop",
+    "hotrundesktopasync",
+    "hotdevdesktop",
+    "hotdevdesktopasync",
+)
+val desktopReleaseRunTasks = setOf(
+    "runrelease",
+    "runreleasedistributable",
+)
 val requestedAndroidDistributions = requestedGradleTasks.mapNotNull { taskName ->
     when {
         "playstore" in taskName -> "playstore"
@@ -1248,6 +1260,9 @@ if (isWindowsHost) {
 
 tasks.withType<KotlinCompilationTask<*>>().configureEach {
     dependsOn(generateRuntimeConfigs)
+    if (name == "compileKotlinDesktop") {
+        dependsOn(extractSherpaOnnxDesktopClasses)
+    }
 }
 
 // sherpa-onnx ~50 MB. Downloaded once into libs/ and gitignored. Not packaged as the C/C++ JNI stubs.
@@ -1264,6 +1279,31 @@ val sherpaOnnxAar: File = project.file("libs/sherpa-onnx-$sherpaOnnxVersion.aar"
     URI(url).toURL().openStream().use { input -> partial.outputStream().use { input.copyTo(it) } }
     check(sha256(partial) == sherpaOnnxSha256) { "Checksum mismatch for $url" }
     check(partial.renameTo(aar)) { "Could not move ${partial.name} into libs/" }
+}
+
+fun ensureSherpaReleaseArtifact(fileName: String): File =
+    project.file("libs/$fileName").also { artifact ->
+        if (artifact.isFile) return@also
+        val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaOnnxVersion/$fileName"
+        logger.lifecycle("Downloading $url")
+        artifact.parentFile.mkdirs()
+        val partial = File(artifact.path + ".part")
+        URI(url).toURL().openStream().use { input -> partial.outputStream().use { input.copyTo(it) } }
+        check(partial.renameTo(artifact)) { "Could not move ${partial.name} into libs/" }
+    }
+
+val sherpaOnnxDesktopClassesJar = layout.buildDirectory.file("sherpa-onnx/classes.jar")
+val extractSherpaOnnxDesktopClasses = tasks.register<Copy>("extractSherpaOnnxDesktopClasses") {
+    from(zipTree(sherpaOnnxAar)) {
+        include("classes.jar")
+    }
+    into(layout.buildDirectory.dir("sherpa-onnx"))
+}
+val sherpaOnnxDesktopNativeJar: File? = when {
+    isWindowsHost -> ensureSherpaReleaseArtifact("sherpa-onnx-native-lib-win-x64-$sherpaOnnxVersion.jar")
+    isMacHost -> ensureSherpaReleaseArtifact("sherpa-onnx-native-lib-osx-aarch64-$sherpaOnnxVersion.jar")
+    isLinuxHost -> ensureSherpaReleaseArtifact("sherpa-onnx-native-lib-linux-x64-$sherpaOnnxVersion.jar")
+    else -> null
 }
 
 kotlin {
@@ -1426,6 +1466,8 @@ kotlin {
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
                 implementation(libs.sentry.jvm)
+                implementation(files(sherpaOnnxDesktopClassesJar))
+                sherpaOnnxDesktopNativeJar?.let { implementation(files(it)) }
             }
         }
         val androidHostTest by getting {
@@ -1504,6 +1546,13 @@ compose.desktop {
                 ?.let { "-Dapachiy.agentQa=true" },
             agentQaDir?.takeIf { it.isNotBlank() }?.let { dir ->
                 "-Dapachiy.agentQaDir=${dir.replace('\\', '/')}"
+            },
+            when {
+                requestedGradleTasks.any { it in desktopDebugRunTasks } ->
+                    "-Dapachiy.desktop.debugBuild=true"
+                requestedGradleTasks.any { it in desktopReleaseRunTasks } ->
+                    "-Dapachiy.desktop.debugBuild=false"
+                else -> null
             },
         )
 

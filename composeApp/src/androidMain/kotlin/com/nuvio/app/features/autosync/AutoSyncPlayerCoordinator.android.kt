@@ -99,24 +99,7 @@ internal class AutoSyncPlayerCoordinator(
      * actually timed for this release, which stays invisible to the user: still one subtitle.
      */
     private suspend fun loadExtraCandidates(type: String, videoId: String) {
-        val canonicalType = if (type.equals("tv", ignoreCase = true)) "series" else type.lowercase()
-        val url = "$OPEN_SUBTITLES_ADDON/subtitles/$canonicalType/$videoId.json"
-        val found = runCatching {
-            val body = AutomaticSubtitleSync.downloadSubtitleBody(url = url, headers = emptyMap())
-            val array = org.json.JSONObject(body).optJSONArray("subtitles") ?: org.json.JSONArray()
-            (0 until array.length()).mapNotNull { index ->
-                val item = array.optJSONObject(index) ?: return@mapNotNull null
-                val subtitleUrl = item.optString("url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val language = item.optString("lang")
-                if (!SubtitleLanguageMatching.matchesLanguageCode(language, SPANISH_SYNC_LANGUAGE)) {
-                    return@mapNotNull null
-                }
-                AutoSyncSubtitleCandidate(url = subtitleUrl, language = language, name = "OpenSubtitles")
-            }.distinctBy { it.url }.take(MAX_EXTRA_CANDIDATES)
-        }.getOrElse { error ->
-            Log.w(TAG, "extra subtitle lookup failed for $videoId: ${error.message}")
-            emptyList()
-        }
+        val found = OpenSubtitlesExtraCandidates.load(type, videoId)
         extraCandidates.addAll(found)
     }
 

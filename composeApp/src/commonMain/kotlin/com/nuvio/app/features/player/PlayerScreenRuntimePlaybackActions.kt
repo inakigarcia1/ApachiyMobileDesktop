@@ -119,6 +119,11 @@ internal fun PlayerScreenRuntime.tryCompleteOpeningOverlay() {
 private fun PlayerScreenRuntime.resetTrackSelectionState() {
     trackPreferenceRestoreApplied = false
     preferredAudioSelectionApplied = false
+    userPinnedAudio = false
+    unsupportedAudioTrackName = null
+    rejectedAudioIndices.clear()
+    manualAudioSelectionIndex = -1
+    audioIndexBeforeManual = -1
     preferredSubtitleSelectionApplied = false
     isUserExplicitSubtitleSelection = false
     hasScannedTextTracksOnce = false

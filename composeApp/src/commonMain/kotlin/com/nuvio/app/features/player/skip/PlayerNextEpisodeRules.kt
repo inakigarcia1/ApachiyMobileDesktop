@@ -132,7 +132,7 @@ object PlayerNextEpisodeRules {
 
     const val THRESHOLD_PERCENT_MIN = 85f
     const val THRESHOLD_PERCENT_MAX = 100f
-    const val THRESHOLD_PERCENT_DEFAULT = 90f
+    const val THRESHOLD_PERCENT_DEFAULT = 96f
     const val PRELOAD_LEAD_MS = 15_000L
 }
 

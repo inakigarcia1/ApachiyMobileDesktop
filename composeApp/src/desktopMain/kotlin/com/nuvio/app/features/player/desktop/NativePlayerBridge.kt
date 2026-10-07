@@ -88,6 +88,19 @@ internal object NativePlayerBridge {
     )
     external fun setMacosWindowFullscreen(windowViewPtr: Long, fullscreen: Boolean)
 
+    /**
+     * Headless decode of a short audio stretch into a 16 kHz mono WAV file for desktop Audio Sync.
+     * Returns false when not implemented on this platform build.
+     */
+    fun sampleSourceAudioWav(
+        sourceUrl: String,
+        headerLines: Array<String>,
+        startPositionMs: Long,
+        durationMs: Long,
+        audioTrackId: Int,
+        outputWavPath: String,
+    ): Boolean = false
+
     external fun setSubtitleDelayMs(handle: Long, delayMs: Int)
     external fun applySubtitleStyle(
         handle: Long,

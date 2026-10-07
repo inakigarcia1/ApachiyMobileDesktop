@@ -10,6 +10,8 @@ import android.util.TypedValue
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.util.AttributeSet
@@ -242,6 +244,7 @@ private fun ExoPlayerSurface(
     val latestOnInitialPositionHandled = rememberUpdatedState(onInitialPositionHandled)
     val latestPlayWhenReady = rememberUpdatedState(playWhenReady)
     val coroutineScope = rememberCoroutineScope()
+    val audioUnplayableRelay = remember { AudioUnplayableRelay() }
 
     val playerSettings = remember {
         PlayerSettingsRepository.ensureLoaded()
@@ -555,6 +558,14 @@ private fun ExoPlayerSurface(
         Log.d(TAG, "$reason: preserving audio track index=${selection.index} id=${selection.id}")
     }
 
+    val audioStall = remember(exoPlayer) {
+        AudioDecoderStallWatch(exoPlayer) { index -> audioUnplayableRelay.listener?.invoke(index) }
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose { audioStall.dispose() }
+    }
+
     DisposableEffect(exoPlayer) {
         PlayerPictureInPictureManager.registerPausePlaybackCallback {
             exoPlayer.pause()
@@ -694,6 +705,7 @@ private fun ExoPlayerSurface(
                         "terminalError=${exoPlayer.playerError?.errorCodeName ?: "none"}",
                 )
                 if (playbackState == Player.STATE_READY) {
+                    audioStall.onReady()
                     fallbackStartPositionMs = null
                     latestOnError.value(null)
                     pendingSeekPositionMs?.let { target ->
@@ -703,6 +715,9 @@ private fun ExoPlayerSurface(
                         }
                     }
                     exoPlayer.logCurrentTracks("STATE_READY")
+                }
+                if (playbackState == Player.STATE_BUFFERING && exoPlayer.playWhenReady) {
+                    audioStall.arm()
                 }
                 syncPlayerViewKeepScreenOn()
                 dispatchExoPlayerSnapshot()
@@ -717,6 +732,7 @@ private fun ExoPlayerSurface(
                 )
                 syncPlayerViewKeepScreenOn()
                 dispatchExoPlayerSnapshot()
+                if (!isPlaying && exoPlayer.playWhenReady) audioStall.arm()
             }
 
             override fun onRenderedFirstFrame() {
@@ -820,6 +836,7 @@ private fun ExoPlayerSurface(
                 }
 
                 override fun seekTo(positionMs: Long) {
+                    audioStall.ignoreForSeek()
                     val target = positionMs.coerceAtLeast(0L)
                     if (exoPlayer.playbackState == Player.STATE_IDLE) {
                         pendingSeekPositionMs = target
@@ -829,6 +846,7 @@ private fun ExoPlayerSurface(
                 }
 
                 override fun seekBy(offsetMs: Long) {
+                    audioStall.ignoreForSeek()
                     exoPlayer.seekTo((exoPlayer.currentPosition + offsetMs).coerceAtLeast(0L))
                 }
 
@@ -861,7 +879,12 @@ private fun ExoPlayerSurface(
                     return tracks
                 }
 
+                override fun setOnAudioTrackUnplayable(listener: ((Int) -> Unit)?) {
+                    audioUnplayableRelay.listener = listener
+                }
+
                 override fun selectAudioTrack(index: Int) {
+                    audioStall.onSelected(index)
                     exoPlayer.selectTrackByIndex(C.TRACK_TYPE_AUDIO, index)
                 }
 
@@ -2126,6 +2149,88 @@ private fun PlayerView.applySubtitleStyle(style: SubtitleStyleState, pipScale: F
     }
 }
 
+private class AudioUnplayableRelay {
+    var listener: ((Int) -> Unit)? = null
+}
+
+private class AudioDecoderStallWatch(
+    private val player: ExoPlayer,
+    private val onStuck: (Int) -> Unit,
+) {
+    private val handler = Handler(Looper.getMainLooper())
+    private var samplePosition = Long.MIN_VALUE
+    private var sampleBuffered = Long.MIN_VALUE
+    private var sampleAt = 0L
+    private var ignoreUntil = 0L
+    private var notifiedIndex = -1
+    private var readySeen = false
+    private var plateauCount = 0
+    private val check = Runnable { onCheck() }
+
+    fun ignoreForSeek() {
+        ignoreUntil = SystemClock.elapsedRealtime() + 1_500L
+    }
+
+    fun onReady() {
+        readySeen = true
+        plateauCount = 0
+    }
+
+    fun onSelected(index: Int) {
+        if (index != notifiedIndex) notifiedIndex = -1
+        arm()
+    }
+
+    fun arm() {
+        samplePosition = player.currentPosition
+        sampleBuffered = player.bufferedPosition
+        sampleAt = SystemClock.elapsedRealtime()
+        handler.removeCallbacks(check)
+        handler.postDelayed(check, AUDIO_STALL_FROZEN_MS)
+    }
+
+    fun dispose() {
+        handler.removeCallbacks(check)
+    }
+
+    private fun onCheck() {
+        val now = SystemClock.elapsedRealtime()
+        val position = player.currentPosition
+        val buffered = player.bufferedPosition
+        val waiting = player.playbackState == Player.STATE_BUFFERING || !player.isPlaying
+        val stuck = now >= ignoreUntil && audioDecoderIsStuck(
+            playWhenReady = player.playWhenReady,
+            waiting = waiting,
+            positionMs = position,
+            bufferedPositionMs = buffered,
+            sampledPositionMs = samplePosition,
+            sampledBufferedPositionMs = sampleBuffered,
+            sampleAgeMs = now - sampleAt,
+        )
+        if (stuck) plateauCount++ else plateauCount = 0
+        if (!stuck || (!readySeen && plateauCount < 3)) {
+            val stillWaiting = player.playWhenReady && waiting && position == samplePosition &&
+                buffered - position >= AUDIO_STALL_BUFFER_AHEAD_MS
+            if (stillWaiting) arm()
+            return
+        }
+        val index = player.selectedAudioGroupIndex()
+        if (index < 0 || index == notifiedIndex) return
+        notifiedIndex = index
+        onStuck(index)
+    }
+}
+
+private fun ExoPlayer.selectedAudioGroupIndex(): Int {
+    var index = 0
+    for (group in currentTracks.groups) {
+        if (group.type != C.TRACK_TYPE_AUDIO) continue
+        if (group.isSelected) return index
+        index++
+    }
+    return -1
+}
+
 private fun ExoPlayer.extractAudioTracks(context: Context): List<AudioTrack> {
     val tracks = mutableListOf<AudioTrack>()
     val trackNameProvider = CustomDefaultTrackNameProvider(context.resources)
@@ -2142,6 +2247,7 @@ private fun ExoPlayer.extractAudioTracks(context: Context): List<AudioTrack> {
                 label = label,
                 language = format.language,
                 isSelected = group.isSelected,
+                isSupported = group.isTrackSupported(0),
             )
         )
         idx++

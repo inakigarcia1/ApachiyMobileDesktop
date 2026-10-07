@@ -15,6 +15,7 @@ data class AudioTrack(
     val label: String,
     val language: String? = null,
     val isSelected: Boolean = false,
+    val isSupported: Boolean = true,
 )
 
 data class SubtitleTrack(
@@ -169,7 +170,10 @@ internal fun sanitizePlayerTrackDisplayLabel(label: String?): String? {
 
 @Composable
 fun localizedTrackDisplayName(label: String?, language: String?, index: Int): String {
+    val languageCode = language?.takeIf { it.isNotBlank() }
+        ?: label?.takeIf { it.isNotBlank() }?.let(SubtitleLanguageMatching::normalizeLanguageCode)?.takeIf { it.isNotBlank() }
+        ?: sanitizePlayerTrackDisplayLabel(label)?.let(SubtitleLanguageMatching::normalizeLanguageCode)?.takeIf { it.isNotBlank() }
+    if (!languageCode.isNullOrBlank()) return languageLabelForCode(languageCode)
     sanitizePlayerTrackDisplayLabel(label)?.let { return it }
-    if (!language.isNullOrBlank()) return languageLabelForCode(language)
     return stringResource(Res.string.compose_player_track_number, index + 1)
 }
