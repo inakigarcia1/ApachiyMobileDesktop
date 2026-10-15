@@ -60,6 +60,18 @@ data class AccountMeResponse(
 )
 
 @Serializable
+data class SearchSuggestionsResponse(
+    val suggestions: List<SearchSuggestionDto> = emptyList(),
+)
+
+@Serializable
+data class SearchSuggestionDto(
+    val title: String = "",
+    val year: String? = null,
+    val type: String = "",
+)
+
+@Serializable
 data class AccountUserDto(
     val id: String? = null,
     val username: String? = null,

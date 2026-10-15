@@ -4,6 +4,7 @@ import com.nuvio.app.core.build.AppVersionPolicy
 import com.nuvio.app.core.network.ApachiyConfig
 import com.nuvio.app.features.addons.httpRequestRaw
 import com.nuvio.app.features.streams.StreamBlacklistRequest
+import io.ktor.http.encodeURLParameter
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -89,6 +90,19 @@ object ApachiyDeviceApi {
             headers = authHeaders(bearerToken),
             body = "",
         )
+
+    suspend fun getSearchSuggestions(bearerToken: String, query: String) =
+        httpRequestRaw(
+            method = "GET",
+            url = apiUrl("v1/search/suggestions") + "?q=" + query.encodeURLParameter(),
+            headers = authHeaders(bearerToken),
+            body = "",
+        )
+
+    fun decodeSearchSuggestions(body: String): List<SearchSuggestionDto> =
+        runCatching { json.decodeFromString<SearchSuggestionsResponse>(body).suggestions }
+            .getOrDefault(emptyList())
+            .filter { it.title.isNotBlank() }
 
     suspend fun deleteAccount(bearerToken: String) =
         httpRequestRaw(
