@@ -474,6 +474,24 @@ class WatchProgressIdentityTest {
         assertEquals(20L, merged.getValue("server/opaque").lastUpdatedEpochMs)
     }
 
+    @Test
+    fun `snapshot drops a server row whose key is pending delete`() {
+        val merged = WatchProgressRepository.mergeWatchProgressEntriesPreservingUnsynced(
+            serverEntries = listOf(
+                record(
+                    contentId = "show",
+                    progressKey = "opaque",
+                    lastWatched = 50L,
+                ),
+            ),
+            localEntries = emptyList(),
+            dirtyProgressKeys = emptySet(),
+            pendingDeleteKeys = setOf("opaque"),
+        )
+
+        assertTrue(merged.isEmpty())
+    }
+
     private fun mergeSnapshot(records: List<ProgressSyncRecord>): Map<String, WatchProgressEntry> =
         WatchProgressRepository.mergeWatchProgressEntriesPreservingUnsynced(
             serverEntries = records,

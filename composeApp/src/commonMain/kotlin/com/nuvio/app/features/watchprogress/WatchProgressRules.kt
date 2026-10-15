@@ -23,6 +23,7 @@ internal data class StoredWatchProgressPayload(
     val deltaCursorEventId: Long = 0L,
     val deltaInitialized: Boolean = false,
     val dirtyProgressKeys: Set<String> = emptySet(),
+    val pendingDeleteKeys: Set<String> = emptySet(),
 )
 
 internal object WatchProgressCodec {
@@ -65,6 +66,7 @@ internal object WatchProgressCodec {
         deltaCursorEventId: Long,
         deltaInitialized: Boolean,
         dirtyProgressKeys: Set<String> = emptySet(),
+        pendingDeleteKeys: Set<String> = emptySet(),
     ): String =
         json.encodeToString(
             StoredWatchProgressPayload(
@@ -76,6 +78,7 @@ internal object WatchProgressCodec {
                 deltaCursorEventId = deltaCursorEventId,
                 deltaInitialized = deltaInitialized,
                 dirtyProgressKeys = dirtyProgressKeys,
+                pendingDeleteKeys = pendingDeleteKeys,
             ),
         )
 }
