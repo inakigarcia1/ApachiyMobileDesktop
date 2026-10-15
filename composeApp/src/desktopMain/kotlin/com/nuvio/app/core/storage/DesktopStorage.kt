@@ -2,25 +2,31 @@ package com.nuvio.app.core.storage
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import java.util.Comparator
 import java.util.Locale
 import java.util.Properties
 import kotlin.io.path.exists
 
 internal object DesktopStorage {
+    internal const val INSTALLATION_STORE_FILE_NAME = "apachiy_installation.properties"
+
     private val json = Json { ignoreUnknownKeys = true }
     private val stores = mutableMapOf<String, Store>()
 
-    val rootDir: Path by lazy {
-        resolveAppDataDir().also { Files.createDirectories(it) }
-    }
+    /** Tests only: redirects [rootDir] to a temp directory. */
+    @Volatile
+    internal var testRootOverride: Path? = null
 
-    val cacheDir: Path by lazy {
-        resolveCacheDir().also { Files.createDirectories(it) }
-    }
+    val rootDir: Path
+        get() = (testRootOverride ?: resolveAppDataDir()).also { Files.createDirectories(it) }
+
+    val cacheDir: Path
+        get() = resolveCacheDir().also { Files.createDirectories(it) }
 
     fun store(name: String): Store = synchronized(stores) {
         stores.getOrPut(name) { Store(rootDir.resolve("$name.properties")) }
@@ -36,6 +42,7 @@ internal object DesktopStorage {
             stream
                 .sorted(Comparator.reverseOrder())
                 .filter { it != rootDir }
+                .filter { path -> path.fileName.toString() != INSTALLATION_STORE_FILE_NAME }
                 .forEach { path -> runCatching { Files.deleteIfExists(path) } }
         }
     }
@@ -160,8 +167,21 @@ internal object DesktopStorage {
 
         private fun persist() {
             Files.createDirectories(file.parent)
-            Files.newOutputStream(file).use { output ->
+            val tempFile = file.resolveSibling("${file.fileName}.tmp-${ProcessHandle.current().pid()}")
+            Files.newOutputStream(tempFile).use { output ->
                 properties.store(output, "Nuvio desktop preferences")
+            }
+            try {
+                Files.move(
+                    tempFile,
+                    file,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                Files.deleteIfExists(tempFile)
             }
         }
     }

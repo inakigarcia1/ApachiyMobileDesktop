@@ -37,6 +37,8 @@ import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.AppIconRepository
 import com.nuvio.app.features.settings.applyDesktopRendererPreference
 import com.nuvio.app.features.settings.transparentPreviewResource
+import com.nuvio.app.desktop.DesktopSingleInstance
+import com.nuvio.app.desktop.configureWindowsAppUserModelId
 import java.awt.Desktop
 import javax.imageio.ImageIO
 import java.awt.Color as AwtColor
@@ -51,6 +53,8 @@ fun main(args: Array<String>) {
     if (System.getProperty("os.name", "").lowercase().contains("linux")) {
         runCatching { NativePlayerBridge.initGtkEarly() }
     }
+    configureWindowsAppUserModelId()
+    DesktopSingleInstance.tryBecomePrimaryOrExit(args)
     applyDesktopRendererPreference()
     SentryInitializer.start()
     configureDesktopQuickJsLibrary()
@@ -76,6 +80,9 @@ fun main(args: Array<String>) {
         val wasMaximizedOnLastExit = remember { DesktopWindowModeStorage.loadWasMaximized() }
         val savedGeometry = remember { DesktopWindowModeStorage.loadWindowedGeometry() }
         val restoresMaximizedWindowPlacement = DesktopHostOs.current != DesktopHostOs.MACOS
+        val shouldRestoreMaximizedOnWindows = restoresMaximizedWindowPlacement &&
+            DesktopHostOs.current == DesktopHostOs.WINDOWS &&
+            !(wasMaximizedOnLastExit == false && savedGeometry != null)
         val initialPlacement = when {
             wasFullscreenOnLastExit && DesktopHostOs.current != DesktopHostOs.WINDOWS -> {
                 WindowPlacement.Fullscreen
@@ -83,13 +90,15 @@ fun main(args: Array<String>) {
             wasMaximizedOnLastExit == false && savedGeometry != null -> {
                 WindowPlacement.Floating
             }
-            restoresMaximizedWindowPlacement -> {
+            restoresMaximizedWindowPlacement && DesktopHostOs.current != DesktopHostOs.WINDOWS -> {
                 WindowPlacement.Maximized
             }
             else -> WindowPlacement.Floating
         }
         val isStartingMaximizedOrFullscreen =
-            initialPlacement == WindowPlacement.Maximized || initialPlacement == WindowPlacement.Fullscreen
+            initialPlacement == WindowPlacement.Maximized ||
+                initialPlacement == WindowPlacement.Fullscreen ||
+                shouldRestoreMaximizedOnWindows
         val maxScreenBounds = remember {
             runCatching {
                 java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -157,9 +166,16 @@ fun main(args: Array<String>) {
             LaunchedEffect(window) {
                 applyNativeDesktopWindowChrome(window)
                 installLinuxExtendedMouseButtons()
+                DesktopSingleInstance.registerMainWindow(window)
+                if (shouldRestoreMaximizedOnWindows) {
+                    windowState.placement = WindowPlacement.Maximized
+                }
                 // Windows fullscreen is emulated natively and isn't reflected by
                 // WindowPlacement, so it must be re-applied once the window peer exists.
                 fullscreenController.applyRestoredFullscreenState(window, windowState, wasFullscreenOnLastExit)
+            }
+            DisposableEffect(window) {
+                onDispose { DesktopSingleInstance.clearMainWindow(window) }
             }
             LaunchedEffect(windowState) {
                 // Covers OS-driven placement changes too (e.g. the native macOS

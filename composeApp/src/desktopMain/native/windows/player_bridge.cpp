@@ -2466,6 +2466,22 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_applyWindowChrome(
         rgbIntToColorRef(textColorRgb)
     );
 
+    if (hwnd && IsWindow(hwnd)) {
+        LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        exStyle &= ~(LONG_PTR)WS_EX_TOOLWINDOW;
+        exStyle |= (LONG_PTR)WS_EX_APPWINDOW;
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
+        SetWindowPos(
+            hwnd,
+            nullptr,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+        );
+    }
+
     // The window's default class brush is white, so any region Windows erases before Skia
     // repaints it flashes white. Erase to black instead; against the near-black UI it is
     // invisible even if a repaint lags.
