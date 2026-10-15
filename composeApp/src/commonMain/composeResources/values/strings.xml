@@ -495,6 +495,8 @@
     <string name="compose_search_empty_no_search_catalogs_message">Your installed addons do not expose catalog search.</string>
     <string name="compose_search_empty_no_search_catalogs_title">No searchable catalogs</string>
     <string name="compose_search_placeholder">Search movies, shows...</string>
+    <string name="compose_search_suggestion_movie">Movie</string>
+    <string name="compose_search_suggestion_series">Series</string>
     <string name="compose_search_recent_searches">Recent Searches</string>
     <string name="compose_search_remove_recent_search">Remove recent search</string>
     <string name="compose_settings_category_about">About</string>

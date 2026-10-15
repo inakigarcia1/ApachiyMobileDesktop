@@ -422,6 +422,8 @@
     <string name="compose_search_empty_no_search_catalogs_message">Tus complementos instalados no exponen búsqueda de catálogo.</string>
     <string name="compose_search_empty_no_search_catalogs_title">No hay catálogos de búsqueda</string>
     <string name="compose_search_placeholder">Buscar películas, series...</string>
+    <string name="compose_search_suggestion_movie">Película</string>
+    <string name="compose_search_suggestion_series">Serie</string>
     <string name="compose_search_recent_searches">Búsquedas recientes</string>
     <string name="compose_search_remove_recent_search">Eliminar búsqueda reciente</string>
     <string name="compose_settings_category_about">Acerca de</string>

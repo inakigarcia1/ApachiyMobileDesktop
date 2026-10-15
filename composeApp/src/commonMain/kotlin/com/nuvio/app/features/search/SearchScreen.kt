@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.device.SearchSuggestionDto
 import com.nuvio.app.core.network.NetworkCondition
 import com.nuvio.app.core.network.NetworkStatusRepository
 import com.nuvio.app.core.ui.NuvioInputField
@@ -85,7 +86,10 @@ import nuvio.composeapp.generated.resources.compose_search_empty_no_search_catal
 import nuvio.composeapp.generated.resources.compose_search_placeholder
 import nuvio.composeapp.generated.resources.compose_search_recent_searches
 import nuvio.composeapp.generated.resources.compose_search_remove_recent_search
+import nuvio.composeapp.generated.resources.compose_search_suggestion_movie
+import nuvio.composeapp.generated.resources.compose_search_suggestion_series
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.delay
 
 @Composable
 fun SearchScreen(
@@ -125,6 +129,18 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var lastRequestedQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var observedOfflineState by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf<List<SearchSuggestionDto>>(emptyList()) }
+
+    LaunchedEffect(query, lastRequestedQuery) {
+        val trimmed = query.trim()
+        if (trimmed.length < 2 || trimmed == lastRequestedQuery?.trim()) {
+            suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        suggestions = emptyList()
+        delay(300)
+        suggestions = loadSearchSuggestions(trimmed)
+    }
 
     fun submitSearch(searchQuery: String = query) {
         val normalizedQuery = searchQuery.trim()
@@ -317,6 +333,19 @@ fun SearchScreen(
                             },
                         )
                     }
+                    val visibleSuggestions = suggestions.takeIf {
+                        query.trim().length >= 2 && query.trim() != lastRequestedQuery?.trim()
+                    }.orEmpty()
+                    if (visibleSuggestions.isNotEmpty()) {
+                        SearchSuggestionList(
+                            suggestions = visibleSuggestions,
+                            onSelect = { title ->
+                                query = title
+                                submitSearch(title)
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(14.dp))
                 }
             }
@@ -476,6 +505,41 @@ private fun SearchEmptyStateCard(
         title = title,
         message = message,
     )
+}
+
+@Composable
+private fun SearchSuggestionList(
+    suggestions: List<SearchSuggestionDto>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val movieLabel = stringResource(Res.string.compose_search_suggestion_movie)
+    val seriesLabel = stringResource(Res.string.compose_search_suggestion_series)
+    Column(
+        modifier = modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        suggestions.forEach { suggestion ->
+            val typeLabel = when (suggestion.type) {
+                "series" -> seriesLabel
+                "movie" -> movieLabel
+                else -> suggestion.type
+            }
+            val detail = listOfNotNull(suggestion.year?.takeIf { it.isNotBlank() }, typeLabel.takeIf { it.isNotBlank() })
+                .joinToString(" · ")
+            Text(
+                text = if (detail.isBlank()) suggestion.title else "${suggestion.title} · $detail",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(suggestion.title) }
+                    .padding(vertical = 8.dp),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Composable
