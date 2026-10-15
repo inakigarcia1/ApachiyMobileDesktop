@@ -634,8 +634,9 @@ val androidDistribution = (
 require(androidDistribution == "playstore" || androidDistribution == "full") {
     "nuvio.android.distribution must be 'playstore' or 'full'."
 }
+val androidStoreSourceDir = "src/androidStore/kotlin"
 val androidDistributionSourceDir = if (androidDistribution == "full") {
-    "src/androidFull/kotlin"
+    "src/androidSideload/kotlin"
 } else {
     "src/androidPlaystore/kotlin"
 }
@@ -1399,10 +1400,8 @@ kotlin {
             kotlin.srcDir(generatedRuntimeConfigDir)
         }
         androidMain {
+            kotlin.srcDir(project.file(androidStoreSourceDir))
             kotlin.srcDir(project.file(androidDistributionSourceDir))
-            if (androidDistribution == "full") {
-                kotlin.srcDir(fullCommonSourceDir)
-            }
 
             dependencies {
                 implementation(libs.compose.uiToolingPreview)
@@ -1435,10 +1434,6 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
                 implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
                 implementation(files(sherpaOnnxAar))
-                if (androidDistribution == "full") {
-                    implementation(files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
-                    implementation(libs.ksoup)
-                }
             }
         }
         val desktopMain by getting {
@@ -1466,13 +1461,9 @@ kotlin {
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
                 implementation(libs.sentry.jvm)
+                implementation("net.java.dev.jna:jna:5.18.1")
                 implementation(files(sherpaOnnxDesktopClassesJar))
                 sherpaOnnxDesktopNativeJar?.let { implementation(files(it)) }
-            }
-        }
-        val androidHostTest by getting {
-            if (androidDistribution == "full") {
-                kotlin.srcDir(project.file("src/androidFullHostTest/kotlin"))
             }
         }
         commonMain.dependencies {

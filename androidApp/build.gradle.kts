@@ -88,7 +88,6 @@ android {
 
     sourceSets.getByName("full") {
         manifest.srcFile("src/full/AndroidManifest.xml")
-        jniLibs.directories.add("../composeApp/src/full/jniLibs")
     }
 
     packaging {
