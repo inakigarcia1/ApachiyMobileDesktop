@@ -1340,6 +1340,12 @@
     <string name="streams_active_scrapers">Scrapers activos</string>
     <string name="streams_checking_more_addons">Comprobando más addons…</string>
     <string name="streams_copy_link">Copiar enlace del stream</string>
+    <string name="streams_add_to_blacklist">Agregar a blacklist</string>
+    <string name="streams_blacklist_confirm_movie">Esta opción deja de aparecer para todos en esta película.</string>
+    <string name="streams_blacklist_confirm_episode">Esta opción deja de aparecer para todos en este capítulo.</string>
+    <string name="streams_blacklist_failed">No se pudo agregar la opción a la blacklist.</string>
+    <string name="streams_blacklist_confirm">Agregar</string>
+    <string name="streams_blacklist_cancel">Cancelar</string>
     <string name="streams_download_file">Descargar archivo</string>
     <string name="streams_open_external_player">Abrir en reproductor externo</string>
     <string name="streams_open_internal_player">Abrir en reproductor interno</string>

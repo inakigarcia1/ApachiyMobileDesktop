@@ -23,6 +23,8 @@ object AccountStatusRepository {
 
     private val _isActive = MutableStateFlow<Boolean?>(null)
     val isActive: StateFlow<Boolean?> = _isActive.asStateFlow()
+    private val _isAdmin = MutableStateFlow(false)
+    val isAdmin: StateFlow<Boolean> = _isAdmin.asStateFlow()
 
     private var observingStarted = false
 
@@ -52,15 +54,22 @@ object AccountStatusRepository {
             val response = ApachiyDeviceApi.getAccountMe(token)
             if (response.status !in 200..299) {
                 log.w { "GET /api/account/me failed: ${response.status}" }
+                _isAdmin.value = false
                 return null
             }
-            val active = ApachiyDeviceApi.decodeAccountMe(response.body).user?.isActive ?: return null
+            val user = ApachiyDeviceApi.decodeAccountMe(response.body).user ?: run {
+                _isAdmin.value = false
+                return null
+            }
+            val active = user.isActive
             _isActive.value = active
+            _isAdmin.value = user.isAdmin
             if (!active) {
                 InactiveSubscriptionNotifier.notifyInactiveSubscription()
             }
             active
         }.onFailure { error ->
+            _isAdmin.value = false
             log.w(error) { "Failed to refresh account status" }
         }.getOrNull()
     }
@@ -72,6 +81,7 @@ object AccountStatusRepository {
 
     fun clear() {
         _isActive.value = null
+        _isAdmin.value = false
     }
 
     fun canStartPlayback(): Boolean = _isActive.value != false

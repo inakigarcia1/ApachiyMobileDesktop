@@ -3,6 +3,7 @@ package com.nuvio.app.core.device
 import com.nuvio.app.core.build.AppVersionPolicy
 import com.nuvio.app.core.network.ApachiyConfig
 import com.nuvio.app.features.addons.httpRequestRaw
+import com.nuvio.app.features.streams.StreamBlacklistRequest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -15,6 +16,7 @@ object ApachiyDeviceApi {
         isLenient = true
         encodeDefaults = true
     }
+    private val blacklistJson = Json { explicitNulls = false }
 
     fun clientHeader(): String =
         "${AppVersionPolicy.clientHeaderPrefix}/${AppVersionPolicy.displayVersionName.ifBlank { "dev" }}"
@@ -70,6 +72,14 @@ object ApachiyDeviceApi {
             url = listUrl(),
             headers = authHeaders(bearerToken),
             body = "",
+        )
+
+    internal suspend fun postStreamBlacklist(bearerToken: String, request: StreamBlacklistRequest) =
+        httpRequestRaw(
+            method = "POST",
+            url = apiUrl("api/account/stream-blacklist"),
+            headers = authHeaders(bearerToken, jsonBody = true),
+            body = blacklistJson.encodeToString(request),
         )
 
     suspend fun getAccountMe(bearerToken: String) =

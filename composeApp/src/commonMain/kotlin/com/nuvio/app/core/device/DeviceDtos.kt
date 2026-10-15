@@ -64,5 +64,6 @@ data class AccountUserDto(
     val id: String? = null,
     val username: String? = null,
     val email: String? = null,
-    @SerialName("isActive") val isActive: Boolean = true,
+    @SerialName("isActive")     val isActive: Boolean = true,
+    val isAdmin: Boolean = false,
 )

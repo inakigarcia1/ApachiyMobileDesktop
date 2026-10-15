@@ -37,8 +37,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Refresh
@@ -83,7 +86,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.nuvio.app.core.account.AccountStatusRepository
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.device.ApachiyDeviceApi
+import com.nuvio.app.core.network.SupabaseProvider
+import io.github.jan.supabase.auth.auth
+import com.nuvio.app.features.updater.AppUpdaterPlatform
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioBottomSheetDivider
@@ -182,6 +190,13 @@ fun StreamsScreen(
     val streamLinkCopiedText = stringResource(Res.string.streams_link_copied)
     val noDirectStreamLinkText = stringResource(Res.string.streams_no_direct_link)
     var streamActionsTarget by remember(videoId) { mutableStateOf<StreamActionsTarget?>(null) }
+    var pendingBlacklist by remember(videoId) { mutableStateOf<StreamBlacklistRequest?>(null) }
+    val isAdmin by AccountStatusRepository.isAdmin.collectAsStateWithLifecycle()
+    val blacklistFailedText = stringResource(Res.string.streams_blacklist_failed)
+    val showCopyStreamLink = AppUpdaterPlatform.isDebugBuild
+    val streamContextActionsEnabled = showCopyStreamLink ||
+        AppFeaturePolicy.externalPlayerSupported ||
+        AppFeaturePolicy.downloadsEnabled
     val downloadScope = rememberCoroutineScope()
     var preferredFilterApplied by remember(videoId) { mutableStateOf(false) }
     var autoPlayOverlayLogoLoadError by remember(logo) { mutableStateOf(false) }
@@ -296,10 +311,14 @@ fun StreamsScreen(
                     onStreamSelected(stream, positionMs, progressFraction)
                 },
                 onStreamLongPress = { stream ->
-                    streamActionsTarget = StreamActionsTarget(stream = stream)
+                    if (streamContextActionsEnabled) {
+                        streamActionsTarget = StreamActionsTarget(stream = stream)
+                    }
                 },
                 onStreamSecondaryClick = { stream, position ->
-                    streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
+                    if (streamContextActionsEnabled) {
+                        streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
+                    }
                 },
                 onRefresh = reloadStreams,
             )
@@ -322,10 +341,14 @@ fun StreamsScreen(
                     onStreamSelected(stream, positionMs, progressFraction)
                 },
                 onStreamLongPress = { stream ->
-                    streamActionsTarget = StreamActionsTarget(stream = stream)
+                    if (streamContextActionsEnabled) {
+                        streamActionsTarget = StreamActionsTarget(stream = stream)
+                    }
                 },
                 onStreamSecondaryClick = { stream, position ->
-                    streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
+                    if (streamContextActionsEnabled) {
+                        streamActionsTarget = StreamActionsTarget(stream = stream, anchorInRoot = position)
+                    }
                 },
                 onRefresh = reloadStreams,
             )
@@ -398,13 +421,30 @@ fun StreamsScreen(
             }
         }
 
+        val blacklistStream = streamActionsTarget?.stream
+        val blacklistRequest = if (isAdmin && blacklistStream != null) {
+            streamBlacklistTarget(
+                addonId = blacklistStream.addonId,
+                bingeGroup = blacklistStream.behaviorHints.bingeGroup,
+                type = type,
+                videoId = videoId,
+                parentMetaId = parentMetaId,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+            )
+        } else {
+            null
+        }
         StreamActionsHost(
             target = streamActionsTarget,
             useDesktopContextMenu = isDesktop,
             externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
             externalPlayerEnabled = AppFeaturePolicy.externalPlayerSupported && playerSettings.externalPlayerEnabled,
             showDownloadAction = AppFeaturePolicy.downloadsEnabled,
+            showCopyLink = showCopyStreamLink,
+            showBlacklist = blacklistRequest != null,
             onDismiss = { streamActionsTarget = null },
+            onBlacklist = { pendingBlacklist = blacklistRequest },
             onCopyLink = { stream ->
                 val directUrl = stream.playableDirectUrl ?: stream.externalOpenUrl
                 if (!directUrl.isNullOrBlank()) {
@@ -502,6 +542,51 @@ fun StreamsScreen(
                 )
             },
         )
+
+        pendingBlacklist?.let { request ->
+            AlertDialog(
+                onDismissRequest = { pendingBlacklist = null },
+                title = { Text(stringResource(Res.string.streams_add_to_blacklist)) },
+                text = {
+                    Text(
+                        stringResource(
+                            if (request.mediaType == "series") {
+                                Res.string.streams_blacklist_confirm_episode
+                            } else {
+                                Res.string.streams_blacklist_confirm_movie
+                            },
+                        ),
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingBlacklist = null
+                            downloadScope.launch {
+                                val token = runCatching {
+                                    SupabaseProvider.client.auth.currentAccessTokenOrNull()
+                                }.getOrNull()
+                                val response = token?.takeIf { it.isNotBlank() }?.let {
+                                    runCatching { ApachiyDeviceApi.postStreamBlacklist(it, request) }.getOrNull()
+                                }
+                                if (response == null || response.status !in 200..299) {
+                                    NuvioToastController.show(blacklistFailedText)
+                                } else {
+                                    StreamsRepository.hideBlacklistedHash(request.infoHash)
+                                }
+                            }
+                        },
+                    ) {
+                        Text(stringResource(Res.string.streams_blacklist_confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingBlacklist = null }) {
+                        Text(stringResource(Res.string.streams_blacklist_cancel))
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -1299,7 +1384,10 @@ private fun StreamActionsHost(
     externalPlayerSupported: Boolean,
     externalPlayerEnabled: Boolean,
     showDownloadAction: Boolean,
+    showCopyLink: Boolean,
+    showBlacklist: Boolean,
     onDismiss: () -> Unit,
+    onBlacklist: () -> Unit,
     onCopyLink: (StreamItem) -> Unit,
     onDownload: (StreamItem) -> Unit,
     onOpen: (StreamItem, openExternally: Boolean) -> Unit,
@@ -1314,7 +1402,10 @@ private fun StreamActionsHost(
             externalPlayerSupported = externalPlayerSupported,
             externalPlayerEnabled = externalPlayerEnabled,
             showDownloadAction = showDownloadAction,
+            showCopyLink = showCopyLink,
+            showBlacklist = showBlacklist,
             onDismiss = onDismiss,
+            onBlacklist = onBlacklist,
             onCopyLink = onCopyLink,
             onDownload = onDownload,
             onOpen = onOpen,
@@ -1325,7 +1416,10 @@ private fun StreamActionsHost(
             externalPlayerSupported = externalPlayerSupported,
             externalPlayerEnabled = externalPlayerEnabled,
             showDownloadAction = showDownloadAction,
+            showCopyLink = showCopyLink,
+            showBlacklist = showBlacklist,
             onDismiss = onDismiss,
+            onBlacklist = onBlacklist,
             onCopyLink = onCopyLink,
             onDownload = onDownload,
             onOpen = onOpen,
@@ -1346,7 +1440,10 @@ private fun DesktopStreamActionsMenu(
     externalPlayerSupported: Boolean,
     externalPlayerEnabled: Boolean,
     showDownloadAction: Boolean,
+    showCopyLink: Boolean,
+    showBlacklist: Boolean,
     onDismiss: () -> Unit,
+    onBlacklist: () -> Unit,
     onCopyLink: (StreamItem) -> Unit,
     onDownload: (StreamItem) -> Unit,
     onOpen: (StreamItem, openExternally: Boolean) -> Unit,
@@ -1355,13 +1452,15 @@ private fun DesktopStreamActionsMenu(
     val edgeMarginPx = with(density) { 8.dp.roundToPx() }
     val menuShape = RoundedCornerShape(8.dp)
     val actions = buildList {
-        add(
-            DesktopStreamAction(
-                icon = Icons.Rounded.ContentCopy,
-                title = stringResource(Res.string.streams_copy_link),
-                onClick = { onCopyLink(stream) },
-            ),
-        )
+        if (showCopyLink) {
+            add(
+                DesktopStreamAction(
+                    icon = Icons.Rounded.ContentCopy,
+                    title = stringResource(Res.string.streams_copy_link),
+                    onClick = { onCopyLink(stream) },
+                ),
+            )
+        }
         if (externalPlayerSupported) {
             add(
                 DesktopStreamAction(
@@ -1383,6 +1482,15 @@ private fun DesktopStreamActionsMenu(
                     icon = Icons.Rounded.Download,
                     title = stringResource(Res.string.streams_download_file),
                     onClick = { onDownload(stream) },
+                ),
+            )
+        }
+        if (showBlacklist) {
+            add(
+                DesktopStreamAction(
+                    icon = Icons.Rounded.Block,
+                    title = stringResource(Res.string.streams_add_to_blacklist),
+                    onClick = onBlacklist,
                 ),
             )
         }
@@ -1522,7 +1630,10 @@ private fun StreamActionsSheet(
     externalPlayerSupported: Boolean,
     externalPlayerEnabled: Boolean,
     showDownloadAction: Boolean,
+    showCopyLink: Boolean,
+    showBlacklist: Boolean,
     onDismiss: () -> Unit,
+    onBlacklist: () -> Unit,
     onCopyLink: (StreamItem) -> Unit,
     onDownload: (StreamItem) -> Unit,
     onOpen: (StreamItem, openExternally: Boolean) -> Unit,
@@ -1572,17 +1683,19 @@ private fun StreamActionsSheet(
                     }
             }
 
-            NuvioBottomSheetDivider()
-            NuvioBottomSheetActionRow(
-                icon = Icons.Rounded.ContentCopy,
-                title = stringResource(Res.string.streams_copy_link),
-                onClick = {
-                    onCopyLink(stream)
-                    coroutineScope.launch {
-                        dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
-                    }
-                },
-            )
+            if (showCopyLink) {
+                NuvioBottomSheetDivider()
+                NuvioBottomSheetActionRow(
+                    icon = Icons.Rounded.ContentCopy,
+                    title = stringResource(Res.string.streams_copy_link),
+                    onClick = {
+                        onCopyLink(stream)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                )
+            }
             if (externalPlayerSupported) {
                 NuvioBottomSheetDivider()
                 NuvioBottomSheetActionRow(
@@ -1609,6 +1722,19 @@ private fun StreamActionsSheet(
                     title = stringResource(Res.string.streams_download_file),
                     onClick = {
                         onDownload(stream)
+                        coroutineScope.launch {
+                            dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
+                        }
+                    },
+                )
+            }
+            if (showBlacklist) {
+                NuvioBottomSheetDivider()
+                NuvioBottomSheetActionRow(
+                    icon = Icons.Rounded.Block,
+                    title = stringResource(Res.string.streams_add_to_blacklist),
+                    onClick = {
+                        onBlacklist()
                         coroutineScope.launch {
                             dismissNuvioBottomSheet(sheetState = sheetState, onDismiss = onDismiss)
                         }
