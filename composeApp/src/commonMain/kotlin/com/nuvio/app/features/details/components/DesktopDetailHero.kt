@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -210,10 +212,19 @@ fun DesktopDetailHero(
     var logoLoadError by remember(meta.id, meta.logo) { mutableStateOf(false) }
     val logoUrl = meta.logo?.takeIf { it.isNotBlank() }
 
+    var synopsisExpanded by remember(meta.id) { mutableStateOf(false) }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(660.dp)
+            .then(
+                if (synopsisExpanded) {
+                    Modifier
+                        .heightIn(min = 660.dp)
+                        .wrapContentHeight(align = Alignment.Bottom, unbounded = true)
+                } else {
+                    Modifier.height(660.dp)
+                },
+            )
             .onSizeChanged { onHeightChanged(it.height) },
     ) {
         val actionHorizontalInset = fullscreenActionHorizontalInsetForWidth(maxWidth.value)
@@ -279,16 +290,16 @@ fun DesktopDetailHero(
             }
             meta.description?.takeIf { it.isNotBlank() }?.let { synopsis ->
                 Spacer(modifier = Modifier.height(space.s16))
-                Text(
+                ExpandableDescription(
                     text = synopsis,
+                    collapsedMaxLines = 4,
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontSize = NuvioTokens.Type.bodyLg,
                         lineHeight = NuvioTokens.LineHeight.bodyLg,
                         letterSpacing = NuvioTokens.LetterSpacing.none,
                     ),
                     color = colorScheme.onSurface,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
+                    onExpandedChange = { synopsisExpanded = it },
                 )
             }
             Spacer(modifier = Modifier.height(space.s28))

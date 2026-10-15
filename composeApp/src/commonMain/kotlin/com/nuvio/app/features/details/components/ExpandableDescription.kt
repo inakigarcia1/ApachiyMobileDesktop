@@ -30,6 +30,7 @@ internal fun ExpandableDescription(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     color: Color = MaterialTheme.colorScheme.onSurface,
+    onExpandedChange: (Boolean) -> Unit = {},
 ) {
     var expanded by remember(text) { mutableStateOf(false) }
     var canExpand by remember(text) { mutableStateOf(false) }
@@ -38,7 +39,10 @@ internal fun ExpandableDescription(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize()
-            .clickable(enabled = canExpand) { expanded = !expanded },
+            .clickable(enabled = canExpand) {
+                expanded = !expanded
+                onExpandedChange(expanded)
+            },
     ) {
         Text(
             text = text,
