@@ -7,13 +7,22 @@ import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
+import com.nuvio.app.features.catalog.CatalogRepository
+import com.nuvio.app.features.home.HomeRepository
+import com.nuvio.app.features.player.PlayerStreamsRepository
+import com.nuvio.app.features.streams.StreamsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -64,6 +73,7 @@ object AddonRepository {
     private var currentProfileId: Int = 1
     private val activeRefreshJobs = mutableMapOf<String, Job>()
     private val pushJobsByProfile = mutableMapOf<Int, Job>()
+    private val quietPullMutex = Mutex()
 
     fun initialize() {
         val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
@@ -230,6 +240,126 @@ object AddonRepository {
         } finally {
             _hasCompletedInitialAddonReconciliation.value = true
         }
+    }
+
+    suspend fun pullQuietly(profileId: Int) {
+        if (!quietPullMutex.tryLock()) return
+        try {
+            if (!_hasCompletedInitialAddonReconciliation.value) return
+            currentProfileId = resolveEffectiveProfileId(profileId)
+            val remoteRows = fetchRemoteAddonRows().getOrElse { error ->
+                log.e(error) { "pullQuietly() — remote list failed" }
+                return
+            }
+            if (remoteRows.isEmpty()) {
+                log.i { "pullQuietly() — remote list empty, keeping local addons" }
+                return
+            }
+
+            val currentAddons = _uiState.value.addons
+            val currentByUrl = currentAddons.associateBy { it.manifestUrl }
+            val fetchedManifests = mutableMapOf<String, AddonManifest>()
+            val manifestResults = mutableMapOf<String, QuietManifestResult>()
+            coroutineScope {
+                remoteRows.map { row ->
+                    async {
+                        val url = row.url
+                        val fetched = runCatching {
+                            val payload = fetchAddonResponseText(url = url, forceRefresh = true)
+                            AddonManifestParser.parse(manifestUrl = url, payload = payload)
+                        }
+                        url to fetched
+                    }
+                }.awaitAll()
+            }.forEach { (url, fetched) ->
+                fetched.fold(
+                    onSuccess = { manifest ->
+                        fetchedManifests[url] = manifest
+                        manifestResults[url] = QuietManifestResult.Ready(manifest.quietToken())
+                    },
+                    onFailure = {
+                        manifestResults[url] = QuietManifestResult.Failed
+                    },
+                )
+            }
+
+            AddonStorage.saveInstalledAddonUrls(
+                currentProfileId,
+                dedupeManifestUrls(remoteRows.map { it.url }),
+            )
+            AddonStorage.saveAddonEnabledStates(
+                currentProfileId,
+                remoteRows.associate { it.url to it.enabled },
+            )
+
+            val next = resolveQuietAddonRows(
+                current = currentAddons.map { addon ->
+                    QuietAddonRow(
+                        url = addon.manifestUrl,
+                        enabled = addon.enabled,
+                        name = addon.userSetName?.takeIf { it.isNotBlank() },
+                        manifestToken = addon.manifest?.quietToken(),
+                    )
+                },
+                remote = remoteRows.map { row ->
+                    QuietRemoteAddon(
+                        url = row.url,
+                        enabled = row.enabled,
+                        name = row.name,
+                    )
+                },
+                manifests = manifestResults,
+            )
+            if (next != null) {
+                _uiState.value = AddonsUiState(
+                    addons = next.map { row ->
+                        val previous = currentByUrl[row.url]
+                        ManagedAddon(
+                            manifestUrl = row.url,
+                            manifest = fetchedManifests[row.url] ?: previous?.manifest,
+                            userSetName = row.name,
+                            enabled = row.enabled,
+                            isRefreshing = false,
+                        )
+                    },
+                )
+                log.i { "pullQuietly() — published ${next.size} addons" }
+            } else {
+                log.i { "pullQuietly() — addon list unchanged" }
+            }
+            pulledFromServer = true
+            initialized = true
+            refreshOpenSurfaces()
+        } finally {
+            quietPullMutex.unlock()
+        }
+    }
+
+    private fun refreshOpenSurfaces() {
+        val addons = _uiState.value.addons
+        HomeRepository.refresh(addons, force = true)
+        StreamsRepository.reloadQuietly()
+        PlayerStreamsRepository.reloadQuietly()
+        CatalogRepository.reloadQuietly()
+    }
+
+    private suspend fun fetchRemoteAddonRows(): Result<List<AddonRow>> = runCatching {
+        val rows = SupabaseProvider.client.postgrest
+            .from("addons")
+            .select {
+                filter { eq("profile_id", currentProfileId) }
+                order("sort_order", Order.ASCENDING)
+            }
+            .decodeList<AddonRow>()
+        val rowsByUrl = linkedMapOf<String, AddonRow>()
+        rows.forEach { row ->
+            val manifestUrl = ensureManifestSuffix(row.url)
+            if (DeniedAddonUrls.isDeniedAddonUrl(manifestUrl)) return@forEach
+            if (!rowsByUrl.containsKey(manifestUrl)) {
+                rowsByUrl[manifestUrl] = row.copy(url = manifestUrl)
+            }
+        }
+        rowsByUrl.values.toList()
     }
 
     suspend fun awaitManifestsLoaded() {

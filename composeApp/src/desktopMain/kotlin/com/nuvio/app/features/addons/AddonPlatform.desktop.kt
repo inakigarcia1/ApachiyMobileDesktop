@@ -53,7 +53,7 @@ internal object DesktopAddonHttpClientProvider {
     private val client = OkHttpClient.Builder()
         .dns(DesktopIPv4FirstDns())
         .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)

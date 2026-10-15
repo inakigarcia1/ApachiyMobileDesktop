@@ -16,6 +16,9 @@ import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.pluginContentId
 import com.nuvio.app.features.streams.AddonStreamGroup
 import com.nuvio.app.features.streams.InstalledStreamAddonTarget
+import com.nuvio.app.features.streams.QuietStreamRequest
+import com.nuvio.app.features.streams.fetchInstalledAddonStreamGroups
+import com.nuvio.app.features.streams.mergeQuietStreamGroups
 import com.nuvio.app.features.streams.StreamAutoPlaySelector
 import com.nuvio.app.features.streams.StreamBadgePresentation
 import com.nuvio.app.features.streams.StreamBadgeSettingsRepository
@@ -54,13 +57,17 @@ object PlayerStreamsRepository {
     private val _sourceState = MutableStateFlow(StreamsUiState())
     val sourceState: StateFlow<StreamsUiState> = _sourceState.asStateFlow()
     private var sourceJob: Job? = null
+    private var sourceQuietJob: Job? = null
     private var sourceRequestKey: String? = null
+    private var sourceQuietRequest: QuietStreamRequest? = null
 
     // episode streams panel
     private val _episodeStreamsState = MutableStateFlow(StreamsUiState())
     val episodeStreamsState: StateFlow<StreamsUiState> = _episodeStreamsState.asStateFlow()
     private var episodeStreamsJob: Job? = null
+    private var episodeQuietJob: Job? = null
     private var episodeStreamsRequestKey: String? = null
+    private var episodeQuietRequest: QuietStreamRequest? = null
 
     fun loadSources(
         type: String,
@@ -110,6 +117,47 @@ object PlayerStreamsRepository {
         )
     }
 
+    fun reloadQuietly() {
+        reloadPanelQuietly(
+            request = sourceQuietRequest,
+            state = _sourceState,
+            job = sourceQuietJob,
+            setJob = { sourceQuietJob = it },
+        )
+        reloadPanelQuietly(
+            request = episodeQuietRequest,
+            state = _episodeStreamsState,
+            job = episodeQuietJob,
+            setJob = { episodeQuietJob = it },
+        )
+    }
+
+    private fun reloadPanelQuietly(
+        request: QuietStreamRequest?,
+        state: MutableStateFlow<StreamsUiState>,
+        job: Job?,
+        setJob: (Job?) -> Unit,
+    ) {
+        if (request == null || !state.value.hasAnyStreams || job?.isActive == true) return
+        setJob(scope.launch {
+            val fetched = fetchInstalledAddonStreamGroups(
+                type = request.type,
+                videoId = request.videoId,
+                runtimeMinutes = request.runtimeMinutes,
+            )
+            val merged = mergeQuietStreamGroups(state.value.groups, fetched) ?: return@launch
+            state.update { current ->
+                if (!current.hasAnyStreams) current
+                else current.copy(
+                    groups = merged,
+                    activeAddonIds = merged.map { it.addonId }.toSet(),
+                    isAnyLoading = false,
+                    emptyStateReason = null,
+                )
+            }
+        })
+    }
+
     fun selectSourceFilter(addonId: String?) {
         _sourceState.update { it.copy(selectedFilter = addonId) }
     }
@@ -120,13 +168,17 @@ object PlayerStreamsRepository {
 
     fun clearEpisodeStreams() {
         episodeStreamsJob?.cancel()
+        episodeQuietJob?.cancel()
         episodeStreamsRequestKey = null
+        episodeQuietRequest = null
         _episodeStreamsState.value = StreamsUiState()
     }
 
     fun clearAll() {
         sourceJob?.cancel()
+        sourceQuietJob?.cancel()
         sourceRequestKey = null
+        sourceQuietRequest = null
         _sourceState.value = StreamsUiState()
         clearEpisodeStreams()
     }
@@ -152,6 +204,8 @@ object PlayerStreamsRepository {
             PluginsUiState(pluginsEnabled = false)
         }
         val requestKey = "$type::$videoId::$season::$episode::pluginsGrouped=${pluginUiState.groupStreamsByRepository}"
+        val quietRequest = QuietStreamRequest(type = type, videoId = videoId, runtimeMinutes = runtimeMinutes)
+        if (panelName == "sources") sourceQuietRequest = quietRequest else episodeQuietRequest = quietRequest
         val current = stateFlow.value
         if (
             !forceRefresh &&

@@ -1,15 +1,28 @@
 package com.nuvio.app.features.streams
 
 import com.nuvio.app.features.addons.AddonManifest
+import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.ManagedAddon
+import com.nuvio.app.features.addons.buildAddonResourceUrl
+import com.nuvio.app.features.addons.enabledAddons
+import com.nuvio.app.features.addons.fetchAddonResponseText
 import com.nuvio.app.features.plugins.PluginRepositoryItem
 import com.nuvio.app.features.plugins.PluginRuntimeResult
 import com.nuvio.app.features.plugins.PluginScraper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.streams_plugin_repository_fallback
 import org.jetbrains.compose.resources.getString
+
+internal data class QuietStreamRequest(
+    val type: String,
+    val videoId: String,
+    val runtimeMinutes: Int?,
+)
 
 internal data class InstalledStreamAddonTarget(
     val addonName: String,
@@ -71,6 +84,88 @@ internal fun List<AddonStreamGroup>.toEmptyStateReason(anyLoading: Boolean): Str
     } else {
         StreamsEmptyStateReason.NoStreamsFound
     }
+}
+
+internal suspend fun fetchInstalledAddonStreamGroups(
+    type: String,
+    videoId: String,
+    runtimeMinutes: Int?,
+): List<AddonStreamGroup> {
+    val targets = AddonRepository.uiState.value.addons.enabledAddons().mapNotNull { addon ->
+        val manifest = addon.manifest ?: return@mapNotNull null
+        val supportsRequestedStream = manifest.resources.any { resource ->
+            resource.name == "stream" &&
+                resource.types.contains(type) &&
+                (resource.idPrefixes.isEmpty() || resource.idPrefixes.any { videoId.startsWith(it) })
+        }
+        if (!supportsRequestedStream) return@mapNotNull null
+        InstalledStreamAddonTarget(
+            addonName = addon.displayTitle.ifBlank { manifest.name },
+            addonId = addon.streamAddonInstanceId(manifest.id),
+            manifest = manifest,
+        )
+    }
+    if (targets.isEmpty()) return emptyList()
+    return coroutineScope {
+        targets.map { addon ->
+            async {
+                val url = buildAddonResourceUrl(
+                    manifestUrl = addon.manifest.transportUrl,
+                    resource = "stream",
+                    type = type,
+                    id = videoId,
+                    manifestId = addon.manifest.id,
+                    runtimeMinutes = runtimeMinutes,
+                )
+                runCatchingUnlessCancelled {
+                    StreamParser.parse(
+                        payload = fetchAddonResponseText(url = url, forceRefresh = true),
+                        addonName = addon.addonName,
+                        addonId = addon.addonId,
+                        addonLogo = addon.manifest.logoUrl,
+                    )
+                }.fold(
+                    onSuccess = { streams ->
+                        AddonStreamGroup(
+                            addonName = addon.addonName,
+                            addonId = addon.addonId,
+                            streams = streams,
+                            isLoading = false,
+                        )
+                    },
+                    onFailure = { error ->
+                        AddonStreamGroup(
+                            addonName = addon.addonName,
+                            addonId = addon.addonId,
+                            streams = emptyList(),
+                            isLoading = false,
+                            error = error.message,
+                        )
+                    },
+                )
+            }
+        }.awaitAll()
+    }
+}
+
+internal fun mergeQuietStreamGroups(
+    current: List<AddonStreamGroup>,
+    fetched: List<AddonStreamGroup>,
+): List<AddonStreamGroup>? {
+    if (fetched.none { it.streams.isNotEmpty() }) return null
+    val fetchedById = fetched.associateBy { it.addonId }
+    val mergedAddons = fetched.map { group ->
+        if (group.streams.isEmpty()) {
+            current.firstOrNull { it.addonId == group.addonId && it.streams.isNotEmpty() } ?: group
+        } else {
+            group
+        }
+    }
+    val fetchedIds = fetchedById.keys
+    val plugins = current.filter { it.addonId.startsWith("plugin") && it.addonId !in fetchedIds }
+    val merged = mergedAddons + plugins
+    if (merged.none { it.streams.isNotEmpty() } || merged == current) return null
+    return merged
 }
 
 internal suspend fun <T> runCatchingUnlessCancelled(block: suspend () -> T): Result<T> =

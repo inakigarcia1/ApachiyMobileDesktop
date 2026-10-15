@@ -27,6 +27,7 @@ object CatalogRepository {
     val uiState: StateFlow<CatalogUiState> = _uiState.asStateFlow()
 
     private var activeJob: Job? = null
+    private var quietJob: Job? = null
     private var activeRequest: CatalogRequest? = null
     private val scrollPositions = linkedMapOf<CatalogRequest, CatalogScrollPosition>()
 
@@ -59,6 +60,32 @@ object CatalogRepository {
             reset = false,
             forceRefresh = false,
         )
+    }
+
+    fun reloadQuietly() {
+        val request = activeRequest ?: return
+        val target = request.target as? CatalogTarget.Addon ?: return
+        val snapshot = _uiState.value
+        if (snapshot.items.isEmpty() || snapshot.isLoading || quietJob?.isActive == true) return
+        quietJob = scope.launch {
+            val page = runCatching {
+                fetchCatalogPage(
+                    manifestUrl = target.manifestUrl,
+                    type = target.contentType,
+                    catalogId = target.catalogId,
+                    genre = target.genre,
+                    forceRefresh = true,
+                ).withUnreleasedFilter(request.hideUnreleasedContent)
+            }.getOrNull() ?: return@launch
+            if (page.items.isEmpty() || activeRequest != request) return@launch
+            val items = dedupeCatalogItems(page.items)
+            if (items == snapshot.items) return@launch
+            _uiState.value = snapshot.copy(
+                items = items,
+                isLoading = false,
+                errorMessage = null,
+            )
+        }
     }
 
     fun clear() {

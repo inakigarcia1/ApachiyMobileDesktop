@@ -49,6 +49,10 @@ object HomeRepository {
     fun refresh(addons: List<ManagedAddon>, force: Boolean = false) {
         val activeAddons = addons.enabledAddons()
         val requests = buildHomeCatalogDefinitions(activeAddons)
+        if (_uiState.value.sections.isNotEmpty()) {
+            refreshKeepingVisible(activeAddons, requests, force)
+            return
+        }
         currentDefinitions = requests
         val requestCacheKeys = requests.mapTo(mutableSetOf(), HomeCatalogDefinition::cacheKey)
         cachedSections = cachedSections.filterKeys(requestCacheKeys::contains)
@@ -136,6 +140,70 @@ object HomeRepository {
                 addons = activeAddons,
                 forceRefresh = force,
                 refreshSources = true,
+                requestKey = requestKey,
+            )
+        }
+    }
+
+    private fun refreshKeepingVisible(
+        activeAddons: List<ManagedAddon>,
+        requests: List<HomeCatalogDefinition>,
+        force: Boolean,
+    ) {
+        if (requests.isEmpty()) return
+        val requestKey = requests.joinToString(separator = "|", transform = HomeCatalogDefinition::cacheKey)
+        if (activeRequestKey == requestKey && activeJob?.isActive == true) return
+        val previousSections = cachedSections
+        val previousDefinitions = currentDefinitions
+        activeRequestKey = requestKey
+        activeJob?.cancel()
+        activeJob = scope.launch {
+            val loadedSections = linkedMapOf<String, HomeCatalogSection>()
+            val prioritizedRequests = prioritizeDefinitions(
+                definitions = requests,
+                snapshot = HomeCatalogSettingsRepository.snapshot(),
+            )
+            prioritizedRequests.chunked(HOME_CATALOG_FETCH_BATCH_SIZE).forEach { batch ->
+                if (activeRequestKey != requestKey) return@launch
+                val results = batch.map { request ->
+                    async {
+                        request to runCatching { request.toSection(forceRefresh = force) }
+                    }
+                }.awaitAll()
+                if (activeRequestKey != requestKey) return@launch
+                results.forEach { (request, result) ->
+                    val fresh = result.getOrNull()
+                    val previous = previousSections[request.cacheKey]
+                    val chosen = when {
+                        fresh != null && fresh.items.isNotEmpty() -> fresh
+                        previous != null && previous.items.isNotEmpty() -> previous
+                        fresh != null -> fresh
+                        else -> null
+                    }
+                    if (chosen != null) loadedSections[request.cacheKey] = chosen
+                }
+            }
+            if (activeRequestKey != requestKey) return@launch
+            val loaded = loadedSections.toMap()
+            val keptExisting = previousSections.values.any { it.items.isNotEmpty() }
+            if (loaded.values.none { it.items.isNotEmpty() } && keptExisting) {
+                activeRequestKey = null
+                return@launch
+            }
+            if (loaded == previousSections && requests == previousDefinitions) {
+                activeRequestKey = null
+                return@launch
+            }
+            currentDefinitions = requests
+            cachedSections = loaded
+            currentRequestKey = requestKey
+            lastErrorMessage = null
+            activeRequestKey = null
+            publishCurrentState(isLoading = false, requestKey = requestKey)
+            ensureCollectionHeroFallback(
+                addons = activeAddons,
+                forceRefresh = false,
+                refreshSources = false,
                 requestKey = requestKey,
             )
         }

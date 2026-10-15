@@ -35,6 +35,7 @@ private const val FOREGROUND_PULL_DELAY_MS = 2500L
 private const val FOREGROUND_ACTIVITY_PULL_MIN_INTERVAL_MS = 2 * 60_000L
 private const val FULL_PULL_MIN_INTERVAL_MS = 10_000L
 private const val PERIODIC_NUVIO_SYNC_PULL_INTERVAL_MS = 15 * 60_000L
+private const val PERIODIC_ADDON_PULL_INTERVAL_MS = 15 * 60_000L
 
 internal enum class ProfileSyncStep {
     Addons,
@@ -273,6 +274,8 @@ object SyncManager {
     private var foregroundPullProfileId: Int? = null
     private var periodicNuvioSyncPullJob: Job? = null
     private var periodicNuvioSyncProfileId: Int? = null
+    private var periodicAddonPullJob: Job? = null
+    private var periodicAddonPullProfileId: Int? = null
     private var activityPullFreshness = ProfilePullFreshness()
     private var fullPullFreshness = ProfilePullFreshness()
 
@@ -326,6 +329,7 @@ object SyncManager {
         }
         foregroundJob?.cancel()
         stopPeriodicNuvioSyncPull()
+        stopPeriodicAddonPull()
     }
 
     private fun accountScopeSnapshot(): CoroutineScope = synchronized(accountScopeLock) {
@@ -559,6 +563,45 @@ object SyncManager {
         periodicNuvioSyncPullJob?.cancel()
         periodicNuvioSyncPullJob = null
         periodicNuvioSyncProfileId = null
+    }
+
+    fun pullAddonsOnForeground(profileId: Int) {
+        val authState = AuthRepository.state.value
+        if (authState !is AuthState.Authenticated || authState.isAnonymous) return
+        accountScopeSnapshot().launch {
+            pullAddonsQuietly(profileId)
+        }
+    }
+
+    fun startPeriodicAddonPull(profileId: Int) {
+        val authState = AuthRepository.state.value
+        if (authState !is AuthState.Authenticated || authState.isAnonymous) {
+            stopPeriodicAddonPull()
+            return
+        }
+        if (periodicAddonPullJob?.isActive == true && periodicAddonPullProfileId == profileId) return
+
+        stopPeriodicAddonPull()
+        periodicAddonPullProfileId = profileId
+        periodicAddonPullJob = accountScopeSnapshot().launch {
+            while (isActive) {
+                delay(PERIODIC_ADDON_PULL_INTERVAL_MS)
+                pullAddonsQuietly(profileId)
+            }
+        }
+    }
+
+    fun stopPeriodicAddonPull() {
+        periodicAddonPullJob?.cancel()
+        periodicAddonPullJob = null
+        periodicAddonPullProfileId = null
+    }
+
+    private suspend fun pullAddonsQuietly(profileId: Int) {
+        val authState = AuthRepository.state.value
+        if (authState !is AuthState.Authenticated || authState.isAnonymous) return
+        if (ProfileRepository.activeProfileId != profileId) return
+        AddonRepository.pullQuietly(profileId)
     }
 
 }

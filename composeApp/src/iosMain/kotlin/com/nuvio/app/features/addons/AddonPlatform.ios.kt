@@ -74,9 +74,9 @@ private fun parseEnabledStateLine(line: String): Pair<String, Boolean>? {
 
 private val addonHttpClient = HttpClient(Darwin) {
     install(HttpTimeout) {
-        requestTimeoutMillis = 60_000
+        requestTimeoutMillis = 120_000
         connectTimeoutMillis = 60_000
-        socketTimeoutMillis = 60_000
+        socketTimeoutMillis = 120_000
     }
     expectSuccess = false
 }

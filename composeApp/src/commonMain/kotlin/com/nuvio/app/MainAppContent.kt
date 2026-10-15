@@ -621,16 +621,23 @@ internal fun MainAppContent(
                         MemberAccessRepository.refreshIfStale()
                         if (syncProfileId != null) {
                             SyncManager.startPeriodicNuvioSyncPull(syncProfileId)
+                            SyncManager.startPeriodicAddonPull(syncProfileId)
                             SyncManager.requestForegroundPull(syncProfileId)
+                            SyncManager.pullAddonsOnForeground(syncProfileId)
                         } else {
                             SyncManager.stopPeriodicNuvioSyncPull()
+                            SyncManager.stopPeriodicAddonPull()
                         }
                     }
-                    AppVisibility.Background -> SyncManager.stopPeriodicNuvioSyncPull()
+                    AppVisibility.Background -> {
+                        SyncManager.stopPeriodicNuvioSyncPull()
+                        SyncManager.stopPeriodicAddonPull()
+                    }
                 }
             }
         } finally {
             SyncManager.stopPeriodicNuvioSyncPull()
+            SyncManager.stopPeriodicAddonPull()
         }
     }
     var resumePromptItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }

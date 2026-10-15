@@ -103,7 +103,7 @@ private fun buildAddonHttpClient(cache: Cache? = null): OkHttpClient =
     OkHttpClient.Builder()
         .dns(IPv4FirstDns())
         .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)

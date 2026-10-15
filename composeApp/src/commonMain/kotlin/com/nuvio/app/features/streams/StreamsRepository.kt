@@ -37,7 +37,9 @@ object StreamsRepository {
     val uiState: StateFlow<StreamsUiState> = _uiState.asStateFlow()
 
     private var activeJob: Job? = null
+    private var quietJob: Job? = null
     private var activeRequestKey: String? = null
+    private var quietRequest: QuietStreamRequest? = null
 
     fun requestToken(
         type: String,
@@ -67,6 +69,29 @@ object StreamsRepository {
             runtimeMinutes = runtimeMinutes,
             forceRefresh = false,
         )
+    }
+
+    fun reloadQuietly() {
+        val request = quietRequest ?: return
+        if (!_uiState.value.hasAnyStreams || quietJob?.isActive == true) return
+        quietJob = scope.launch {
+            val fetched = fetchInstalledAddonStreamGroups(
+                type = request.type,
+                videoId = request.videoId,
+                runtimeMinutes = request.runtimeMinutes,
+            )
+            if (quietRequest != request) return@launch
+            val merged = mergeQuietStreamGroups(_uiState.value.groups, fetched) ?: return@launch
+            _uiState.update { current ->
+                if (!current.hasAnyStreams) current
+                else current.copy(
+                    groups = merged,
+                    activeAddonIds = merged.map { it.addonId }.toSet(),
+                    isAnyLoading = false,
+                    emptyStateReason = null,
+                )
+            }
+        }
     }
 
     fun reload(
@@ -133,6 +158,7 @@ object StreamsRepository {
         }
 
         activeRequestKey = requestKey
+        quietRequest = QuietStreamRequest(type = type, videoId = videoId, runtimeMinutes = runtimeMinutes)
         activeJob?.cancel()
         _uiState.value = StreamsUiState(requestToken = requestToken)
 
@@ -858,10 +884,18 @@ object StreamsRepository {
         }
     }
 
+    fun hideBlacklistedHash(infoHash: String) {
+        _uiState.update { current ->
+            current.copy(groups = current.groups.map { it.withoutApachiyHash(infoHash) })
+        }
+    }
+
     fun clear() {
         activeJob?.cancel()
         activeJob = null
         activeRequestKey = null
+        quietRequest = null
+        quietJob?.cancel()
         _uiState.value = StreamsUiState()
     }
 
