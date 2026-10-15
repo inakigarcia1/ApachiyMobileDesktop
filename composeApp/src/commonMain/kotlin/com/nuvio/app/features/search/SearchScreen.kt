@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -137,9 +138,8 @@ fun SearchScreen(
             suggestions = emptyList()
             return@LaunchedEffect
         }
-        suggestions = emptyList()
         delay(300)
-        suggestions = loadSearchSuggestions(trimmed)
+        suggestions = loadSearchSuggestions(trimmed) ?: return@LaunchedEffect
     }
 
     fun submitSearch(searchQuery: String = query) {
@@ -517,7 +517,7 @@ private fun SearchSuggestionList(
     val seriesLabel = stringResource(Res.string.compose_search_suggestion_series)
     Column(
         modifier = modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         suggestions.forEach { suggestion ->
             val typeLabel = when (suggestion.type) {
@@ -531,10 +531,12 @@ private fun SearchSuggestionList(
                 text = if (detail.isBlank()) suggestion.title else "${suggestion.title} · $detail",
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onSelect(suggestion.title) }
-                    .padding(vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
