@@ -1,0 +1,14 @@
+---
+description: Commit finished work in TV, desktop, and mobile before stopping or switching branches
+alwaysApply: true
+---
+
+# Commit finished client work
+
+Work you just finished in Apachiy-NuvioFork (TV) or Apachiy-DesktopMobile (desktop and mobile) gets committed before you stop, switch branches, or hand the tree back.
+
+- Stage only the files from that change. Leave unrelated dirty files alone.
+- One commit per change. Do not mix a flavor move with a sync fix.
+- Do not commit secrets, `.env`, APKs, or build logs.
+- If the task lives on another branch, commit it on that branch before checking it out.
+- Say the commit subject when you finish. A dirty tree you changed is not done.
