@@ -2,8 +2,7 @@ package com.nuvio.app.features.player.desktop
 
 import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
-import com.nuvio.app.core.network.ApachiyAddonAuth
-import com.nuvio.app.core.network.ApachiyConfig
+import com.nuvio.app.features.addons.DesktopAddonHttpClientProvider
 import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
 import com.nuvio.app.features.player.PlayerControlEpisodeItem
 import com.nuvio.app.features.player.PlayerControlFilterItem
@@ -466,7 +465,7 @@ internal class NativePlayerController(
         )
         currentVolumeLevel = stateWithVolume.volumeLevel ?: currentVolumeLevel
         controlsState = stateWithVolume
-        val resolvedState = stateWithVolume.withAuthedOverlayImages(startFetch = false)
+        val resolvedState = stateWithVolume.withAuthedOverlayImages(startFetch = true)
         val isFullscreen = isDesktopAppFullscreen(SwingUtilities.getWindowAncestor(host))
         val structureKey = NativeControlsStructureKey(
             state = resolvedState.nativeControlsStructureKey(),
@@ -489,7 +488,6 @@ internal class NativePlayerController(
                 "speed=${stateWithVolume.playbackSpeedLabel} audioLabel=${stateWithVolume.audioLabel} " +
                 "subsLabel=${stateWithVolume.subtitlesLabel} fullscreen=$isFullscreen"
         }
-        stateWithVolume.withAuthedOverlayImages(startFetch = true)
         NativePlayerBridge.updateControls(current, resolvedState.toControlsJson(isFullscreen))
     }
 
@@ -1193,32 +1191,84 @@ internal class NativePlayerController(
     }
 
     private val overlayImageDataUrls = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val episodeImageUrls = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val overlayImageFetches = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val episodeImageFetches = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val overlayImageAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val episodeImageAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val overlayImageFetchPermits = java.util.concurrent.Semaphore(4)
+    private val overlayRefreshLock = Any()
+    private var overlayRefreshScheduled = false
 
     private fun PlayerControlsState.withAuthedOverlayImages(startFetch: Boolean): PlayerControlsState {
-        fun map(url: String?): String? {
-            if (url.isNullOrBlank() || !url.needsAuthedOverlayFetch()) return url
-            overlayImageDataUrls[url]?.let { return it }
-            if (startFetch) scheduleOverlayImageFetch(url)
-            return url
+        val rewrittenThumbs = HashMap<String, String>()
+        for (item in episodeItems) {
+            val raw = item.thumbnail
+            if (raw.isBlank() || raw in rewrittenThumbs) continue
+            val resolved = resolveEpisodeThumbnail(raw, startFetch)
+            if (resolved != raw) rewrittenThumbs[raw] = resolved
         }
         return copy(
-            pauseOverlayLogo = map(pauseOverlayLogo),
-            openingArtwork = map(openingArtwork),
-            openingLogo = map(openingLogo),
-            nextEpisodeThumbnail = map(nextEpisodeThumbnail).orEmpty(),
+            pauseOverlayLogo = resolveOverlayImage(pauseOverlayLogo, startFetch),
+            openingArtwork = resolveOverlayImage(openingArtwork, startFetch),
+            openingLogo = resolveOverlayImage(openingLogo, startFetch),
+            nextEpisodeThumbnail = resolveOverlayImage(nextEpisodeThumbnail, startFetch).orEmpty(),
+            episodeItems = if (rewrittenThumbs.isEmpty()) {
+                episodeItems
+            } else {
+                episodeItems.map { item ->
+                    rewrittenThumbs[item.thumbnail]?.let { item.copy(thumbnail = it) } ?: item
+                }
+            },
         )
     }
 
+    private fun resolveEpisodeThumbnail(url: String, startFetch: Boolean): String {
+        if (url.startsWith("data:") || url.startsWith("http://127.0.0.1:")) return url
+        val normalized = url.normalizeOverlayImageUrl()
+        if (!normalized.shouldDownloadForWebView()) return normalized
+        episodeImageUrls[normalized]?.let { return it }
+        if (startFetch) scheduleEpisodeImageFetch(normalized)
+        return ""
+    }
+
+    private fun resolveOverlayImage(url: String?, startFetch: Boolean): String? {
+        if (url.isNullOrBlank() || url.startsWith("data:")) return url
+        val normalized = url.normalizeOverlayImageUrl()
+        if (!normalized.shouldDownloadForWebView()) return normalized
+        overlayImageDataUrls[normalized]?.let { return it }
+        if (startFetch) scheduleOverlayImageFetch(normalized)
+        return normalized
+    }
+
+    private fun requestOverlayControlsRefresh() {
+        synchronized(overlayRefreshLock) {
+            if (overlayRefreshScheduled) return
+            overlayRefreshScheduled = true
+        }
+        SwingUtilities.invokeLater {
+            synchronized(overlayRefreshLock) { overlayRefreshScheduled = false }
+            updateControls(controlsState)
+        }
+    }
+
     private fun scheduleOverlayImageFetch(url: String) {
+        if (overlayImageDataUrls.containsKey(url)) return
         if (!overlayImageFetches.add(url)) return
         Thread {
-            val outcome = runCatching { downloadOverlayImage(url) }
+            val image = fetchImage(url, overlayImageAttempts, OVERLAY_IMAGE_MAX_BYTES)
             overlayImageFetches.remove(url)
-            val dataUrl = outcome.getOrNull()
-            if (dataUrl != null) {
-                overlayImageDataUrls[url] = dataUrl
-                SwingUtilities.invokeLater { updateControls(controlsState) }
+            if (image != null) {
+                val encoded = java.util.Base64.getEncoder().encodeToString(image.bytes)
+                overlayImageDataUrls[url] = "data:${image.type};base64,$encoded"
+                overlayImageAttempts.remove(url)
+                requestOverlayControlsRefresh()
+                return@Thread
+            }
+            if ((overlayImageAttempts[url] ?: 0) >= 3) return@Thread
+            if (overlayImageAttempts.containsKey(url)) {
+                Thread.sleep(400L * (overlayImageAttempts[url] ?: 1))
+                scheduleOverlayImageFetch(url)
             }
         }.apply {
             name = "overlay-img"
@@ -1227,46 +1277,98 @@ internal class NativePlayerController(
         }
     }
 
-    private fun downloadOverlayImage(url: String): String? {
-        val token = ApachiyAddonAuth.currentAccessToken()?.takeIf { it.isNotBlank() } ?: return null
-        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.connectTimeout = 8000
-        conn.readTimeout = 8000
-        conn.instanceFollowRedirects = true
-        val code = conn.responseCode
-        if (code !in 200..299) {
-            conn.disconnect()
-            error("http $code")
-        }
-        val type = conn.contentType?.substringBefore(';')?.trim()?.takeIf { it.startsWith("image/") }
-            ?: "image/jpeg"
-        val buffer = java.io.ByteArrayOutputStream()
-        val chunk = ByteArray(8192)
-        var total = 0
-        conn.inputStream.use { input ->
-            while (true) {
-                val read = input.read(chunk)
-                if (read < 0) break
-                total += read
-                if (total > 2_000_000) {
-                    conn.disconnect()
-                    return null
-                }
-                buffer.write(chunk, 0, read)
+    private fun scheduleEpisodeImageFetch(url: String) {
+        if (episodeImageUrls.containsKey(url)) return
+        if (!episodeImageFetches.add(url)) return
+        Thread {
+            val image = fetchImage(url, episodeImageAttempts, EPISODE_IMAGE_MAX_BYTES)
+            episodeImageFetches.remove(url)
+            if (image != null) {
+                episodeImageUrls[url] = DesktopPlayerImageServer.publish(url, image.type, image.bytes)
+                episodeImageAttempts.remove(url)
+                requestOverlayControlsRefresh()
+                return@Thread
             }
+            if ((episodeImageAttempts[url] ?: 0) >= 3) return@Thread
+            if (episodeImageAttempts.containsKey(url)) {
+                Thread.sleep(400L * (episodeImageAttempts[url] ?: 1))
+                scheduleEpisodeImageFetch(url)
+            }
+        }.apply {
+            name = "episode-img"
+            isDaemon = true
+            start()
         }
-        conn.disconnect()
-        if (buffer.size() == 0) return null
-        val encoded = java.util.Base64.getEncoder().encodeToString(buffer.toByteArray())
-        return "data:$type;base64,$encoded"
+    }
+
+    private fun fetchImage(
+        url: String,
+        attempts: java.util.concurrent.ConcurrentHashMap<String, Int>,
+        maxBytes: Int,
+    ): FetchedPlayerImage? {
+        overlayImageFetchPermits.acquire()
+        val outcome = try {
+            runCatching { downloadImage(url, maxBytes) }
+        } finally {
+            overlayImageFetchPermits.release()
+        }
+        val image = outcome.getOrNull()
+        if (image != null) return image
+        if (outcome.exceptionOrNull() != null) {
+            attempts.merge(url, 1, Int::plus)
+        }
+        return null
+    }
+
+    private fun downloadImage(url: String, maxBytes: Int): FetchedPlayerImage? {
+        val client = DesktopAddonHttpClientProvider.get()
+        val request = okhttp3.Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401 || response.code == 403) {
+                error("http ${response.code}")
+            }
+            if (!response.isSuccessful) return null
+            val body = response.body ?: return null
+            val type = body.contentType()
+                ?.let { "${it.type}/${it.subtype}" }
+                ?.takeIf { it.startsWith("image/") }
+                ?: "image/jpeg"
+            val bytes = body.byteStream().use { input ->
+                val buffer = java.io.ByteArrayOutputStream()
+                val chunk = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val read = input.read(chunk)
+                    if (read < 0) break
+                    total += read
+                    if (total > maxBytes) return null
+                    buffer.write(chunk, 0, read)
+                }
+                buffer.toByteArray()
+            }
+            if (bytes.isEmpty()) return null
+            return FetchedPlayerImage(type, bytes)
+        }
     }
 }
 
-private fun String.needsAuthedOverlayFetch(): Boolean {
-    if (!contains("/metadata/img")) return false
-    val host = runCatching { java.net.URI(this).host }.getOrNull().orEmpty()
-    return ApachiyAddonAuth.shouldAttachAuth(host, ApachiyAddonAuth.hostFromBaseUrl(ApachiyConfig.API_BASE_URL))
+private data class FetchedPlayerImage(
+    val type: String,
+    val bytes: ByteArray,
+)
+
+private const val OVERLAY_IMAGE_MAX_BYTES = 400_000
+private const val EPISODE_IMAGE_MAX_BYTES = 2_000_000
+
+private fun String.normalizeOverlayImageUrl(): String {
+    val trimmed = trim()
+    return if (trimmed.startsWith("//")) "https:$trimmed" else trimmed
+}
+
+private fun String.shouldDownloadForWebView(): Boolean {
+    if (startsWith("data:")) return false
+    val normalized = normalizeOverlayImageUrl()
+    return normalized.startsWith("http://") || normalized.startsWith("https://")
 }
 
 private fun String.toPlaybackLogKey(): String {

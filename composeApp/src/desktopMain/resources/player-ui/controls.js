@@ -1695,7 +1695,6 @@ const appendEpisodeRow = (container, item) => {
   if (item.thumbnail) {
     const image = document.createElement("img");
     image.alt = "";
-    image.loading = "lazy";
     setImageSource(image, item.thumbnail);
     thumb.appendChild(image);
   }
@@ -1751,22 +1750,37 @@ const ensureEpisodeSeason = () => {
   return selectedEpisodeSeason;
 };
 
+const renderSeasonPicker = (seasons, selectedSeason) => {
+  const list = normalizeItems(seasons);
+  const picker = seasonFilterList.closest(".season-picker");
+  const showPicker = list.length > 1;
+  seasonFilterList.hidden = !showPicker;
+  if (picker) picker.hidden = !showPicker;
+  if (!showPicker) return;
+  const signature = list.map(season => `${season.season}\u0001${season.label || ""}`).join("\u0002");
+  if (seasonFilterList.dataset.signature !== signature) {
+    seasonFilterList.dataset.signature = signature;
+    seasonFilterList.textContent = "";
+    list.forEach(season => {
+      const option = document.createElement("option");
+      option.value = String(season.season);
+      option.textContent = season.label || `Season ${season.season}`;
+      seasonFilterList.appendChild(option);
+    });
+  }
+  const value = selectedSeason == null ? "" : String(selectedSeason);
+  if (seasonFilterList.value !== value) seasonFilterList.value = value;
+};
+
 const renderEpisodeList = () => {
   episodesPanelTitle.textContent = state.episodesPanelTitle || "Episodes";
   episodesCloseButton.textContent = state.panelCloseLabel || "Close";
 
   const selectedSeason = ensureEpisodeSeason();
   const seasons = normalizeItems(state.episodeSeasons);
-  renderFilterRow(
-    seasonFilterList,
-    seasons.map(season => ({ id: String(season.season), label: season.label })),
-    selectedSeason == null ? "" : String(selectedSeason),
-    id => {
-      selectedEpisodeSeason = Number(id);
-      renderEpisodeList();
-    },
-  );
+  renderSeasonPicker(seasons, selectedSeason);
 
+  const episodeScrollTop = episodeList.scrollTop;
   episodeList.textContent = "";
   let items = normalizeItems(state.episodeItems);
   if (selectedSeason != null) {
@@ -1777,6 +1791,7 @@ const renderEpisodeList = () => {
     return;
   }
   items.forEach(item => appendEpisodeRow(episodeList, item));
+  episodeList.scrollTop = episodeScrollTop;
 };
 
 const renderEpisodeStreams = () => {
@@ -2763,6 +2778,12 @@ sourceList.addEventListener("scroll", () => {
     requestSourceVirtualRender();
   }
 }, { passive: true });
+seasonFilterList.addEventListener("change", () => {
+  const next = Number(seasonFilterList.value);
+  if (!Number.isFinite(next) || Number(selectedEpisodeSeason) === next) return;
+  selectedEpisodeSeason = next;
+  renderEpisodeList();
+});
 episodesCloseButton.addEventListener("click", event => {
   event.stopPropagation();
   closePlayerModal();
