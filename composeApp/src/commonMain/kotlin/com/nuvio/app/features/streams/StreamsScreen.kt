@@ -58,6 +58,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -902,50 +904,75 @@ internal fun ProviderFilterRow(
     val reloadLabel = stringResource(Res.string.streams_reload)
     val addonGroups = groups.filter { it.streams.isNotEmpty() || it.isLoading }
     val scrollState = rememberScrollState()
+    var showOrderHelp by remember { mutableStateOf(false) }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(
-                if (isDesktop) {
-                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                } else {
-                    Modifier
-                        .nuvioDesktopDragScroll(scrollState)
-                        .horizontalScroll(scrollState)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                },
-            ),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (isDesktop) {
-            FilterChip(
-                label = reloadLabel,
-                icon = Icons.Rounded.Refresh,
-                contentDescription = reloadLabel,
-                isSelected = false,
-                onClick = onRefresh,
-            )
-        } else {
-            FilterChip(
-                icon = Icons.Rounded.Refresh,
-                contentDescription = stringResource(Res.string.streams_refresh),
-                isSelected = false,
-                onClick = onRefresh,
-            )
-            FilterChip(
-                label = stringResource(Res.string.collections_tab_all),
-                isSelected = selectedFilter == null,
-                onClick = { onFilterSelected(null) },
-            )
-            addonGroups.forEach { group ->
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (isDesktop) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .nuvioDesktopDragScroll(scrollState)
+                            .horizontalScroll(scrollState)
+                    },
+                ),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (isDesktop) {
                 FilterChip(
-                    label = group.addonName,
-                    isSelected = selectedFilter == group.addonId,
-                    onClick = { onFilterSelected(group.addonId) },
+                    label = reloadLabel,
+                    icon = Icons.Rounded.Refresh,
+                    contentDescription = reloadLabel,
+                    isSelected = false,
+                    onClick = onRefresh,
                 )
+            } else {
+                FilterChip(
+                    icon = Icons.Rounded.Refresh,
+                    contentDescription = stringResource(Res.string.streams_refresh),
+                    isSelected = false,
+                    onClick = onRefresh,
+                )
+                FilterChip(
+                    label = stringResource(Res.string.collections_tab_all),
+                    isSelected = selectedFilter == null,
+                    onClick = { onFilterSelected(null) },
+                )
+                addonGroups.forEach { group ->
+                    FilterChip(
+                        label = group.addonName,
+                        isSelected = selectedFilter == group.addonId,
+                        onClick = { onFilterSelected(group.addonId) },
+                    )
+                }
             }
         }
+        FilterChip(
+            label = "?",
+            contentDescription = stringResource(Res.string.streams_order_help),
+            isSelected = false,
+            onClick = { showOrderHelp = true },
+        )
+    }
+    if (showOrderHelp) {
+        AlertDialog(
+            onDismissRequest = { showOrderHelp = false },
+            text = { Text(stringResource(Res.string.streams_order_help_message)) },
+            confirmButton = {
+                TextButton(onClick = { showOrderHelp = false }) {
+                    Text(stringResource(Res.string.action_close))
+                }
+            },
+        )
     }
 }
 
@@ -995,6 +1022,13 @@ private fun FilterChip(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
+            )
+            .then(
+                if (contentDescription != null && icon == null) {
+                    Modifier.semantics { this.contentDescription = contentDescription }
+                } else {
+                    Modifier
+                },
             )
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
@@ -1119,7 +1153,7 @@ internal fun StreamList(
                             showHeader = uiState.selectedFilter == null,
                             debridEnabled = debridEnabled,
                             appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
-                            showFileSizeBadges = streamBadgeSettings.showFileSizeBadges && !isDesktop,
+                            showFileSizeBadges = false,
                             showAddonLogo = streamBadgeSettings.showAddonLogo,
                             badgePlacement = streamBadgeSettings.badgePlacement,
                             torrentNotSupportedText = torrentNotSupportedText,

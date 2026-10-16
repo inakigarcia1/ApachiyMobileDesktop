@@ -359,6 +359,18 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         isLocked = playerControlsLocked,
         lockedOverlayVisible = lockedOverlayVisible,
         controlsVisible = controlsVisible && !playerControlsLocked && !openingOverlayWanted,
+        showGestureTutorial = showGestureTutorial,
+        gestureTutorialSteps = listOf(
+            stringResource(Res.string.player_gesture_desktop_seek),
+            stringResource(Res.string.player_gesture_desktop_fine_seek),
+            stringResource(Res.string.player_gesture_desktop_volume),
+            stringResource(Res.string.player_gesture_desktop_pause),
+            stringResource(Res.string.player_gesture_desktop_speed),
+            stringResource(Res.string.player_gesture_desktop_fullscreen),
+        ).joinToString("\n"),
+        gestureTutorialNextLabel = stringResource(Res.string.player_gesture_tutorial_next),
+        gestureTutorialExitLabel = stringResource(Res.string.player_gesture_tutorial_exit),
+        gestureHelpLabel = stringResource(Res.string.player_gesture_help),
         parentalWarnings = parentalWarnings,
         showParentalGuide = showParentalGuide,
         showSubmitIntro = isSeries &&
@@ -448,6 +460,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             .onSizeChanged { layoutSize = it }
             .playerSurfaceTapGestures(
                 layoutSize = layoutSize,
+                sideGestureSystemEdgeExclusionPx = sideGestureSystemEdgeExclusionPx,
                 playerControlsLockedState = gestureCallbacks.playerControlsLocked,
                 onSurfaceTap = gestureCallbacks.onSurfaceTap,
                 onSurfaceDoubleTap = gestureCallbacks.onSurfaceDoubleTap,
@@ -563,8 +576,32 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             )
         }
 
+        LaunchedEffect(initialLoadCompleted, errorMessage) {
+            if (gestureTutorialChecked) return@LaunchedEffect
+            if (!initialLoadCompleted || errorMessage != null) return@LaunchedEffect
+            gestureTutorialChecked = true
+            if (!PlayerSettingsStorage.loadGestureTutorialSeen()) {
+                PlayerSettingsStorage.saveGestureTutorialSeen()
+                showGestureTutorial = true
+                controlsVisible = true
+            }
+        }
         if (!isDesktop) {
             RenderPlayerControls(displayedPositionMs = displayedPositionMs, isEpisode = isEpisode)
+            if (showGestureTutorial) {
+                PlayerGestureTutorial(
+                    steps = listOf(
+                        stringResource(Res.string.player_gesture_mobile_seek),
+                        stringResource(Res.string.player_gesture_mobile_brightness),
+                        stringResource(Res.string.player_gesture_mobile_volume),
+                        stringResource(Res.string.player_gesture_mobile_double_tap),
+                        stringResource(Res.string.player_gesture_mobile_speed),
+                    ),
+                    nextLabel = stringResource(Res.string.player_gesture_tutorial_next),
+                    exitLabel = stringResource(Res.string.player_gesture_tutorial_exit),
+                    onDismiss = { showGestureTutorial = false },
+                )
+            }
         }
         if (!isInPip) {
             AutoSyncBubbleToastHost(controlsVisible)
@@ -629,6 +666,7 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, 
             onLockToggle = {
                 if (playerControlsLocked) unlockPlayerControls() else lockPlayerControls()
             },
+            onHelpClick = { showGestureTutorial = true },
             onBack = { requestBack() },
             onTogglePlayback = { togglePlayback() },
             onSeekBack = { seekBy(-10_000L) },
@@ -833,6 +871,13 @@ private fun PlayerScreenRuntime.handlePlayerControlsAction(action: PlayerControl
                 showVideoSettingsModal = true
                 controlsVisible = true
             }
+        }
+        PlayerControlsAction.OpenGestureTutorial -> {
+            showGestureTutorial = true
+            controlsVisible = true
+        }
+        PlayerControlsAction.DismissGestureTutorial -> {
+            showGestureTutorial = false
         }
         PlayerControlsAction.DoubleTapSeekBack -> {
             prepareDoubleTapSeekForNativeFallback(PlayerSeekDirection.Backward)

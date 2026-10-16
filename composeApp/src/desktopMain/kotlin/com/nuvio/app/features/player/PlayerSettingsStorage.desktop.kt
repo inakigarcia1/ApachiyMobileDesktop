@@ -317,6 +317,13 @@ internal actual object PlayerSettingsStorage {
     actual fun loadNvidiaRtxSuperResolutionEnabled(): Boolean? = loadBoolean(nvidiaRtxSuperResolutionEnabledKey)
     actual fun saveNvidiaRtxSuperResolutionEnabled(enabled: Boolean) = saveBoolean(nvidiaRtxSuperResolutionEnabledKey, enabled)
 
+    actual fun loadGestureTutorialSeen(): Boolean =
+        store.getBoolean("gesture_tutorial_seen") ?: false
+
+    actual fun saveGestureTutorialSeen() {
+        store.putBoolean("gesture_tutorial_seen", true)
+    }
+
     private fun scoped(key: String): String = ProfileScopedKey.of(key)
     private fun loadString(key: String): String? = store.getString(scoped(key))
     private fun saveString(key: String, value: String) = store.putString(scoped(key), value)

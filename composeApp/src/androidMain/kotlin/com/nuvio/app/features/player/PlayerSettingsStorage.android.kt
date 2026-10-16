@@ -171,6 +171,13 @@ actual object PlayerSettingsStorage {
         preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
     }
 
+    actual fun loadGestureTutorialSeen(): Boolean =
+        preferences?.getBoolean("gesture_tutorial_seen", false) ?: false
+
+    actual fun saveGestureTutorialSeen() {
+        preferences?.edit()?.putBoolean("gesture_tutorial_seen", true)?.apply()
+    }
+
     actual fun loadShowLoadingOverlay(): Boolean? =
         preferences?.let { sharedPreferences ->
             val key = ProfileScopedKey.of(showLoadingOverlayKey)

@@ -3261,3 +3261,37 @@ svg {
   stroke: none;
   pointer-events: none;
 }
+
+.gesture-tutorial {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .55);
+}
+
+.gesture-tutorial[hidden] {
+  display: none;
+}
+
+.gesture-tutorial-card {
+  max-width: 520px;
+  margin: 24px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, .82);
+  color: #fff;
+}
+
+.gesture-tutorial-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+#gestureHelpButton {
+  font-size: 22px;
+  line-height: 1;
+}

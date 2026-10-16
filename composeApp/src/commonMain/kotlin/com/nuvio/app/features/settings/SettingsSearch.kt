@@ -547,15 +547,6 @@ internal fun settingsSearchEntries(
     )
     addRow(
         page = SettingsPage.Streams,
-        key = "stream-size-badges",
-        title = stringResource(Res.string.settings_stream_size_badges_title),
-        description = stringResource(Res.string.settings_stream_size_badges_description),
-        pageLabel = streamsPage,
-        section = stringResource(Res.string.settings_stream_badges_section),
-        icon = Icons.Rounded.Style,
-    )
-    addRow(
-        page = SettingsPage.Streams,
         key = "stream-badge-position",
         title = stringResource(Res.string.settings_stream_badge_position_title),
         description = stringResource(Res.string.settings_stream_badge_position_description),
@@ -739,15 +730,6 @@ internal fun settingsSearchEntries(
             PlaybackSearchRow("up-next", stringResource(Res.string.settings_continue_watching_up_next_title), stringResource(Res.string.settings_continue_watching_up_next_description)),
             PlaybackSearchRow("unaired-next-up", stringResource(Res.string.settings_continue_watching_show_unaired_next_up_title), stringResource(Res.string.settings_continue_watching_show_unaired_next_up_description)),
             PlaybackSearchRow("blur-next-up", stringResource(Res.string.settings_continue_watching_blur_next_up_title), stringResource(Res.string.settings_continue_watching_blur_next_up_description)),
-        ),
-    )
-    addContinueWatchingRows(
-        addRow = ::addRow,
-        pageLabel = continueWatchingPage,
-        section = stringResource(Res.string.settings_continue_watching_section_on_launch),
-        icon = Icons.Rounded.Style,
-        rows = listOf(
-            PlaybackSearchRow("resume-prompt", stringResource(Res.string.settings_continue_watching_resume_prompt_title), stringResource(Res.string.settings_continue_watching_resume_prompt_description)),
         ),
     )
 

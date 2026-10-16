@@ -84,8 +84,6 @@ import nuvio.composeapp.generated.resources.settings_stream_badge_position_top
 import nuvio.composeapp.generated.resources.settings_stream_badge_urls_description
 import nuvio.composeapp.generated.resources.settings_stream_badge_urls_title
 import nuvio.composeapp.generated.resources.settings_stream_badges_section
-import nuvio.composeapp.generated.resources.settings_stream_size_badges_description
-import nuvio.composeapp.generated.resources.settings_stream_size_badges_title
 import nuvio.composeapp.generated.resources.settings_stream_addon_logo_title
 import nuvio.composeapp.generated.resources.settings_stream_addon_logo_description
 import nuvio.composeapp.generated.resources.settings_stream_display_section
@@ -107,13 +105,6 @@ internal fun LazyListScope.streamsSettingsContent(isTablet: Boolean) {
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_stream_size_badges_title),
-                    description = stringResource(Res.string.settings_stream_size_badges_description),
-                    checked = currentSettings.showFileSizeBadges,
-                    isTablet = isTablet,
-                    onCheckedChange = StreamBadgeSettingsRepository::setShowFileSizeBadges,
-                )
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_stream_badge_position_title),
                     description = badgePlacementLabel,

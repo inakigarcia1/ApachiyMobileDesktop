@@ -115,8 +115,18 @@
       </div>
     </section>
     <div class="content">
+      <section class="gesture-tutorial" id="gestureTutorial" hidden>
+        <div class="gesture-tutorial-card">
+          <p id="gestureTutorialText"></p>
+          <div class="gesture-tutorial-actions">
+            <button class="panel-button" id="gestureTutorialExit" type="button"></button>
+            <button class="panel-button" id="gestureTutorialNext" type="button"></button>
+          </div>
+        </div>
+      </section>
       <header class="header">
         <nav class="header-actions" aria-label="Player actions">
+          <button class="header-button" id="gestureHelpButton" type="button" data-command="openGestureTutorial" aria-label="Gesture help">?</button>
           <button class="header-button" id="submitIntroButton" data-command="submitIntro" aria-label="Submit intro"><svg><use href="#icon-flag"></use></svg></button>
           <button class="header-button" id="videoSettingsButton" data-command="videoSettings" aria-label="Video settings"><svg><use href="#icon-build"></use></svg></button>
           <button class="header-button" id="fullscreenButton" data-command="toggleFullscreen" aria-label="Enter fullscreen"><svg><use id="fullscreenIcon" href="#icon-fullscreen"></use></svg></button>

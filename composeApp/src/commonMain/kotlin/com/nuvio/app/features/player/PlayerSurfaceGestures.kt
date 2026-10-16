@@ -1,18 +1,22 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.State
+import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.abs
 import kotlin.math.roundToLong
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal fun Modifier.playerSurfaceTapGestures(
     layoutSize: IntSize,
+    sideGestureSystemEdgeExclusionPx: Float,
     playerControlsLockedState: State<Boolean>,
     onSurfaceTap: State<(Offset) -> Unit>,
     onSurfaceDoubleTap: State<(Offset) -> Unit>,
@@ -20,22 +24,72 @@ internal fun Modifier.playerSurfaceTapGestures(
     deactivateHoldToSpeedState: State<() -> Unit>,
     revealLockedOverlayState: State<() -> Unit>,
 ): Modifier =
-    pointerInput(layoutSize) {
-        detectTapGestures(
-            onPress = {
-                tryAwaitRelease()
-                deactivateHoldToSpeedState.value()
-            },
-            onTap = { offset -> onSurfaceTap.value(offset) },
-            onDoubleTap = { offset -> onSurfaceDoubleTap.value(offset) },
-            onLongPress = {
+    pointerInput(layoutSize, sideGestureSystemEdgeExclusionPx) {
+        var pendingTap: Job? = null
+        var lastUpUptime = 0L
+        var lastUpPosition = Offset.Unspecified
+        awaitEachGesture {
+            val down = awaitPointerEvent().changes.firstOrNull { it.changedToDown() }
+                ?: return@awaitEachGesture
+            val height = size.height.toFloat().takeIf { it > 0f } ?: return@awaitEachGesture
+            val topExclusion = sideGestureSystemEdgeExclusionPx.coerceAtMost(height * 0.25f)
+            if (down.position.y <= topExclusion) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                }
+                return@awaitEachGesture
+            }
+            pendingTap?.cancel()
+            pendingTap = null
+            val slop = viewConfiguration.touchSlop
+            var moved = false
+            val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull null
+                    if (!change.pressed) return@withTimeoutOrNull change
+                    val travel = change.position - down.position
+                    if (change.isConsumed || travel.getDistance() > slop) {
+                        moved = true
+                        return@withTimeoutOrNull null
+                    }
+                }
+            }
+            if (moved) return@awaitEachGesture
+            if (up == null) {
                 if (playerControlsLockedState.value) {
                     revealLockedOverlayState.value()
                 } else {
                     activateHoldToSpeedState.value()
                 }
-            },
-        )
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    change.consume()
+                    if (!change.pressed) break
+                }
+                deactivateHoldToSpeedState.value()
+                return@awaitEachGesture
+            }
+            val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis
+            val isDouble = lastUpUptime != 0L &&
+                up.uptimeMillis - lastUpUptime <= doubleTapTimeout &&
+                (up.position - lastUpPosition).getDistance() <= slop * 2
+            if (isDouble) {
+                lastUpUptime = 0L
+                onSurfaceDoubleTap.value(up.position)
+            } else {
+                lastUpUptime = up.uptimeMillis
+                lastUpPosition = up.position
+                val tapPosition = up.position
+                pendingTap = launch {
+                    delay(doubleTapTimeout)
+                    onSurfaceTap.value(tapPosition)
+                }
+            }
+        }
     }
 
 internal fun Modifier.playerSurfaceDragGestures(
@@ -57,7 +111,18 @@ internal fun Modifier.playerSurfaceDragGestures(
 ): Modifier =
     pointerInput(gestureController, layoutSize, sideGestureSystemEdgeExclusionPx) {
         awaitEachGesture {
-            val down = awaitFirstDown()
+            val down = awaitPointerEvent().changes.firstOrNull { it.changedToDown() }
+                ?: return@awaitEachGesture
+            val height = size.height.toFloat().takeIf { it > 0f } ?: return@awaitEachGesture
+            val topExclusion = sideGestureSystemEdgeExclusionPx.coerceAtMost(height * 0.25f)
+            if (down.position.y <= topExclusion) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                }
+                return@awaitEachGesture
+            }
             if (playerControlsLockedState.value) {
                 while (true) {
                     val event = awaitPointerEvent()
@@ -72,7 +137,6 @@ internal fun Modifier.playerSurfaceDragGestures(
             }
             val controller = gestureController
             val width = size.width.toFloat().takeIf { it > 0f } ?: return@awaitEachGesture
-            val height = size.height.toFloat().takeIf { it > 0f } ?: return@awaitEachGesture
             val sideGestureEdgeExclusionPx = sideGestureSystemEdgeExclusionPx
                 .coerceAtMost(height * 0.25f)
             val isInSideGestureSystemEdge =

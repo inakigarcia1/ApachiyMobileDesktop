@@ -1487,6 +1487,8 @@ private fun String.toPlayerControlsAction(): PlayerControlsAction? =
         "external" -> PlayerControlsAction.OpenExternalPlayer
         "submitIntro" -> PlayerControlsAction.SubmitIntro
         "videoSettings" -> PlayerControlsAction.VideoSettings
+        "openGestureTutorial" -> PlayerControlsAction.OpenGestureTutorial
+        "dismissGestureTutorial" -> PlayerControlsAction.DismissGestureTutorial
         else -> null
     }
 
@@ -1844,6 +1846,16 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         appendJsonField("notificationMessage", notificationMessage)
         append(',')
         appendJsonField("notificationToken", notificationToken)
+        append(',')
+        appendJsonField("showGestureTutorial", showGestureTutorial)
+        append(',')
+        appendJsonField("gestureTutorialSteps", gestureTutorialSteps)
+        append(',')
+        appendJsonField("gestureTutorialNextLabel", gestureTutorialNextLabel)
+        append(',')
+        appendJsonField("gestureTutorialExitLabel", gestureTutorialExitLabel)
+        append(',')
+        appendJsonField("gestureHelpLabel", gestureHelpLabel)
         append('}')
     }
 

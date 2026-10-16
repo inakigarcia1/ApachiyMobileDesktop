@@ -17,6 +17,13 @@ import kotlinx.serialization.json.put
 import platform.Foundation.NSUserDefaults
 
 actual object PlayerSettingsStorage {
+    actual fun loadGestureTutorialSeen(): Boolean =
+        NSUserDefaults.standardUserDefaults.boolForKey("gesture_tutorial_seen")
+
+    actual fun saveGestureTutorialSeen() {
+        NSUserDefaults.standardUserDefaults.setBool(true, forKey = "gesture_tutorial_seen")
+    }
+
     private const val showLoadingOverlayKey = "show_loading_overlay"
     private const val pauseOverlayEnabledKey = "pause_overlay_enabled"
     private const val showParentalGuideKey = "show_parental_guide"

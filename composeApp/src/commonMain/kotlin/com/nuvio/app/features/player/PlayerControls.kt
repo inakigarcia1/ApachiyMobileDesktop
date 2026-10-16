@@ -43,10 +43,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
@@ -77,6 +82,7 @@ internal fun PlayerControlsShell(
     isLocked: Boolean,
     showPlaybackControls: Boolean = true,
     onLockToggle: () -> Unit,
+    onHelpClick: () -> Unit,
     onBack: () -> Unit,
     onTogglePlayback: () -> Unit,
     onSeekBack: () -> Unit,
@@ -149,6 +155,7 @@ internal fun PlayerControlsShell(
                 showParentalGuide = showParentalGuide,
                 onParentalGuideAnimationComplete = onParentalGuideAnimationComplete,
                 onLockToggle = onLockToggle,
+                onHelpClick = onHelpClick,
                 onVideoSettingsClick = onVideoSettingsClick,
                 onOpenInExternalPlayer = onOpenInExternalPlayer,
                 onBack = onBack,
@@ -217,6 +224,7 @@ private fun PlayerHeader(
     showParentalGuide: Boolean,
     onParentalGuideAnimationComplete: () -> Unit,
     onLockToggle: () -> Unit,
+    onHelpClick: () -> Unit,
     onVideoSettingsClick: (() -> Unit)?,
     onOpenInExternalPlayer: (() -> Unit)?,
     onBack: () -> Unit,
@@ -309,6 +317,12 @@ private fun PlayerHeader(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    PlayerHeaderTextButton(
+                        label = "?",
+                        contentDescription = stringResource(Res.string.player_gesture_help),
+                        buttonSize = metrics.headerIconSize + 16.dp,
+                        onClick = onHelpClick,
+                    )
                     if (onSubmitIntroClick != null) {
                         PlayerHeaderIconButton(
                             icon = Icons.Rounded.Flag,
@@ -358,6 +372,30 @@ private fun PlayerHeader(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PlayerHeaderTextButton(
+    label: String,
+    contentDescription: String,
+    buttonSize: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(buttonSize)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.35f))
+            .clickable(onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }
 
@@ -744,5 +782,56 @@ private fun PlayerActionPillButton(
             overflow = TextOverflow.Ellipsis,
             softWrap = false,
         )
+    }
+}
+
+@Composable
+internal fun PlayerGestureTutorial(
+    steps: List<String>,
+    nextLabel: String,
+    exitLabel: String,
+    onDismiss: () -> Unit,
+) {
+    var step by remember { mutableIntStateOf(0) }
+    val safeStep = step.coerceIn(0, steps.lastIndex.coerceAtLeast(0))
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.55f))
+            .clickable(onClick = {}),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(24.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black.copy(alpha = 0.82f))
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = steps.getOrElse(safeStep) { "" },
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = exitLabel,
+                    color = Color.White,
+                    modifier = Modifier
+                        .clickable(onClick = onDismiss)
+                        .padding(8.dp),
+                )
+                if (safeStep < steps.lastIndex) {
+                    Text(
+                        text = nextLabel,
+                        color = Color.White,
+                        modifier = Modifier
+                            .clickable { step = safeStep + 1 }
+                            .padding(8.dp),
+                    )
+                }
+            }
+        }
     }
 }

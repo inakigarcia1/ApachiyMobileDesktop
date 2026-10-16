@@ -2289,10 +2289,47 @@ const renderChrome = () => {
   syncChromeAutoHideTimer(showOpening);
 };
 
+let gestureTutorialStep = 0;
+
+const renderGestureTutorial = () => {
+  const overlay = document.getElementById("gestureTutorial");
+  if (!overlay) return;
+  const steps = String(state.gestureTutorialSteps || "").split("\n").filter(Boolean);
+  const open = Boolean(state.showGestureTutorial) && steps.length > 0;
+  overlay.hidden = !open;
+  if (!open) return;
+  if (gestureTutorialStep >= steps.length) gestureTutorialStep = 0;
+  const text = document.getElementById("gestureTutorialText");
+  const next = document.getElementById("gestureTutorialNext");
+  const exit = document.getElementById("gestureTutorialExit");
+  if (text) text.textContent = steps[gestureTutorialStep];
+  if (exit) exit.textContent = state.gestureTutorialExitLabel || "Exit";
+  if (next) {
+    next.textContent = state.gestureTutorialNextLabel || "Next";
+    next.hidden = gestureTutorialStep >= steps.length - 1;
+  }
+  const help = document.getElementById("gestureHelpButton");
+  if (help && state.gestureHelpLabel) help.setAttribute("aria-label", state.gestureHelpLabel);
+};
+
+document.getElementById("gestureTutorialExit")?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  send("dismissGestureTutorial", 0);
+});
+
+document.getElementById("gestureTutorialNext")?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  gestureTutorialStep += 1;
+  renderGestureTutorial();
+});
+
 const render = () => {
   applyTheme();
   renderChrome();
   renderActiveModal();
+  renderGestureTutorial();
 };
 
 const focusShortcutRoot = () => {
@@ -3002,6 +3039,7 @@ window.playerUpdate = update => {
 };
 
 window.playerControls = nextState => {
+  const previousShowGestureTutorial = Boolean(state.showGestureTutorial);
   const previousCloseToken = Number(state.closeModalsToken) || 0;
   const previousSubmitIntroSuccessToken = Number(state.submitIntroSuccessToken) || 0;
   const previousNotificationToken = Number(state.notificationToken) || 0;
@@ -3056,6 +3094,9 @@ window.playerControls = nextState => {
   ) {
     resetSubtitleSelectionState();
   }
+  if (Boolean(state.showGestureTutorial) && !previousShowGestureTutorial) {
+    gestureTutorialStep = 0;
+  }
   render();
   if (pendingSettingToastCommand === "resize" && (state.resizeModeLabel || "") !== previousResizeLabel) {
     pendingSettingToastCommand = "";
@@ -3069,7 +3110,7 @@ window.playerControls = nextState => {
 
 const isControlsSurfaceEvent = event => {
   if (activeModal) return true;
-  if (event.target.closest("button, input, textarea, select, a, .action-pill, .volume-control, .modal-layer, .skip-prompt, .next-episode-card")) {
+  if (event.target.closest("button, input, textarea, select, a, .action-pill, .volume-control, .modal-layer, .skip-prompt, .next-episode-card, .gesture-tutorial")) {
     return true;
   }
 

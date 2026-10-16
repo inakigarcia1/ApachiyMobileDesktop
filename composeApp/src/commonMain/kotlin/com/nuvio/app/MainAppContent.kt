@@ -63,7 +63,6 @@ import com.nuvio.app.core.ui.DisintegrationRequestController
 import com.nuvio.app.core.ui.NativeTabBridge
 import com.nuvio.app.core.ui.NuvioCardDepthSurface
 import com.nuvio.app.core.ui.NuvioContinueWatchingActionSheet
-import com.nuvio.app.core.ui.NuvioFloatingPrompt
 import com.nuvio.app.core.ui.NuvioPosterZoomActionOverlay
 import com.nuvio.app.core.ui.NuvioStatusModal
 import com.nuvio.app.core.ui.NuvioToastController
@@ -155,7 +154,6 @@ import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.features.watching.domain.isShortPlaceholderDuration
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 import com.nuvio.app.features.watchprogress.ContinueWatchingPreferencesRepository
-import com.nuvio.app.features.watchprogress.ResumePromptRepository
 import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.WatchProgressSourceCoordinator
@@ -640,7 +638,6 @@ internal fun MainAppContent(
             SyncManager.stopPeriodicAddonPull()
         }
     }
-    var resumePromptItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastExternalPlayerLaunch by remember { mutableStateOf<PlayerLaunch?>(null) }
     val activePlaybackProfileId = profileState.activeProfile?.profileIndex ?: ProfileRepository.activeProfileId
     val launchExternalPlayer = rememberExternalPlayerLauncher { result ->
@@ -715,27 +712,6 @@ internal fun MainAppContent(
         }
     }
     val continueWatchingPreferencesUiState by ContinueWatchingPreferencesRepository.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(
-        initialHomeReady,
-        profileSwitchLoading,
-        profileState.activeProfile?.profileIndex,
-        continueWatchingPreferencesUiState.showResumePromptOnLaunch,
-    ) {
-        if (!ownsAppRuntime) return@LaunchedEffect
-        if (!initialHomeReady || profileSwitchLoading) return@LaunchedEffect
-        if (resumePromptItem != null) return@LaunchedEffect
-        if (continueWatchingPreferencesUiState.showResumePromptOnLaunch) {
-            resumePromptItem = ResumePromptRepository.consumeResumePrompt()
-        }
-    }
-
-    LaunchedEffect(currentRoute) {
-        val inPlaybackFlow = currentRoute is StreamRoute || currentRoute is PlayerRoute
-        if (inPlaybackFlow) {
-            resumePromptItem = null
-        }
-    }
 
         LaunchedEffect(navController) {
             if (!ownsAppRuntime) return@LaunchedEffect
@@ -1197,7 +1173,6 @@ internal fun MainAppContent(
         }
 
         val openContinueWatching: (ContinueWatchingItem, Boolean, Boolean) -> Unit = { item, manualSelection, startFromBeginning ->
-            resumePromptItem = null
             if (item.isCloudLibraryContinueWatchingItem()) {
                 coroutineScope.launch {
                     when (
@@ -2077,24 +2052,6 @@ internal fun MainAppContent(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-
-            NuvioFloatingPrompt(
-                visible = resumePromptItem != null,
-                imageUrl = resumePromptItem?.poster ?: resumePromptItem?.imageUrl,
-                title = resumePromptItem?.title.orEmpty(),
-                subtitle = resumePromptItem?.let { localizedContinueWatchingSubtitle(it) }.orEmpty(),
-                progressFraction = resumePromptItem?.progressFraction ?: 0f,
-                actionLabel = stringResource(Res.string.resume_prompt_action),
-                onAction = {
-                    val item = resumePromptItem ?: return@NuvioFloatingPrompt
-                    resumePromptItem = null
-                    openContinueWatching(item, false, false)
-                },
-                onDismiss = { resumePromptItem = null },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(15f),
-            )
 
             NuvioToastHost(
                 modifier = Modifier

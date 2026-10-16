@@ -143,6 +143,8 @@ internal class PlayerScreenRuntime(
     var gestureController: PlayerGestureController? = null
 
     var controlsVisible by mutableStateOf(false)
+    var showGestureTutorial by mutableStateOf(false)
+    var gestureTutorialChecked = false
     var controlsActivityTick by mutableStateOf(0)
     var playerControlsLocked by mutableStateOf(false)
     var activeSourceUrl by mutableStateOf(sourceUrl)
