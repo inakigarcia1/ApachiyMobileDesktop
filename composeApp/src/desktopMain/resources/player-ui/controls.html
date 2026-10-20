@@ -198,7 +198,11 @@
             <span class="provider" id="providerName"></span>
           </div>
         </section>
-        <input id="seek" class="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
+        <div class="scrub-wrap" id="seekWrap">
+          <input id="seek" class="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
+          <div class="scrub-playhead" aria-hidden="true"></div>
+          <div class="scrub-hover" id="seekHover" hidden></div>
+        </div>
         <div class="time-row">
           <span class="time-pill" id="position">00:00</span>
           <span class="time-pill" id="duration">00:00</span>

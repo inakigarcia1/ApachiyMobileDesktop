@@ -1,5 +1,7 @@
 const root = document.getElementById("playerRoot");
 const seek = document.getElementById("seek");
+const seekWrap = document.getElementById("seekWrap");
+const seekHover = document.getElementById("seekHover");
 const positionLabel = document.getElementById("position");
 const durationLabel = document.getElementById("duration");
 const timeLabel = document.getElementById("timeLabel");
@@ -734,6 +736,7 @@ const setProgress = (positionMs, durationMs) => {
   const percent = durationMs > 0 ? Math.max(0, Math.min(100, positionMs / durationMs * 100)) : 0;
   seek.value = Math.round(percent * 10);
   seek.style.setProperty("--progress", `${percent}%`);
+  if (seekWrap) seekWrap.style.setProperty("--progress", `${percent}%`);
   positionLabel.textContent = formatTime(positionMs);
   durationLabel.textContent = formatTime(durationMs);
   if (timeLabel) {
@@ -2965,6 +2968,60 @@ seek.addEventListener("change", () => {
   state.positionMs = scrubPositionMs;
   render();
 });
+
+const pointerPositionMs = event => {
+  const rect = (seekWrap || seek).getBoundingClientRect();
+  const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+  const clamped = Math.max(0, Math.min(1, ratio));
+  const durationMs = Math.max(0, Number(state.durationMs) || 0);
+  return Math.round(clamped * durationMs);
+};
+
+const placeSeekHover = event => {
+  if (!seekHover || !seekWrap) return;
+  const rect = seekWrap.getBoundingClientRect();
+  seekHover.hidden = false;
+  seekHover.textContent = formatTime(pointerPositionMs(event));
+  seekHover.style.left = `${event.clientX - rect.left}px`;
+};
+
+if (seekWrap) {
+  seekWrap.addEventListener("pointerdown", event => {
+    if (event.button != null && event.button !== 0) return;
+    noteChromeActivity();
+    isScrubbing = true;
+    scrubPositionMs = pointerPositionMs(event);
+    setProgress(scrubPositionMs, state.durationMs);
+    send("scrubChange", scrubPositionMs);
+    placeSeekHover(event);
+    seekWrap.setPointerCapture(event.pointerId);
+  });
+  seekWrap.addEventListener("pointermove", event => {
+    placeSeekHover(event);
+    if (!isScrubbing) return;
+    noteChromeActivity();
+    scrubPositionMs = pointerPositionMs(event);
+    setProgress(scrubPositionMs, state.durationMs);
+    send("scrubChange", scrubPositionMs);
+  });
+  const finishPointerSeek = event => {
+    if (!isScrubbing) return;
+    noteChromeActivity();
+    scrubPositionMs = pointerPositionMs(event);
+    isScrubbing = false;
+    setProgress(scrubPositionMs, state.durationMs);
+    send("scrubFinish", scrubPositionMs);
+    state.positionMs = scrubPositionMs;
+    render();
+  };
+  seekWrap.addEventListener("pointerup", finishPointerSeek);
+  seekWrap.addEventListener("pointercancel", () => {
+    isScrubbing = false;
+  });
+  seekWrap.addEventListener("pointerleave", () => {
+    if (seekHover && !isScrubbing) seekHover.hidden = true;
+  });
+}
 
 volumeSlider.addEventListener("input", () => {
   noteChromeActivity();

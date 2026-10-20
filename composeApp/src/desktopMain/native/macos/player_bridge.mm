@@ -1835,7 +1835,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
 - (void)seekToMilliseconds:(long long)positionMs {
     if (!_mpv) return;
     std::string seconds = std::to_string((double)positionMs / 1000.0);
-    const char *command[] = {"seek", seconds.c_str(), "absolute+keyframes", NULL};
+    const char *command[] = {"seek", seconds.c_str(), "absolute+exact", NULL};
     mpv_command(_mpv, command);
     _cachedPositionSeconds.store(fmax((double)positionMs / 1000.0, 0.0));
 }
