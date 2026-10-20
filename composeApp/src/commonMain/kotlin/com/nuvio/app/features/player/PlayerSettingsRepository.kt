@@ -80,6 +80,7 @@ data class PlayerSettingsUiState(
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 96f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
+    val nextEpisodeThresholdCustomized: Boolean = false,
     val useLibass: Boolean = false,
     val libassRenderType: String = "CUES",
     val iosVideoOutputPreset: IosVideoOutputPreset = IosVideoOutputPreset.NativeEdr,
@@ -149,6 +150,7 @@ object PlayerSettingsRepository {
     private var nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     private var nextEpisodeThresholdPercent = 96f
     private var nextEpisodeThresholdMinutesBeforeEnd = 2f
+    private var nextEpisodeThresholdCustomized = false
     private var useLibass = false
     private var libassRenderType = "CUES"
     private var iosVideoOutputPreset = IosVideoOutputPreset.NativeEdr
@@ -223,6 +225,7 @@ object PlayerSettingsRepository {
         nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
         nextEpisodeThresholdPercent = 96f
         nextEpisodeThresholdMinutesBeforeEnd = 2f
+        nextEpisodeThresholdCustomized = false
         useLibass = false
         libassRenderType = "CUES"
         iosVideoOutputPreset = IosVideoOutputPreset.NativeEdr
@@ -356,11 +359,17 @@ object PlayerSettingsRepository {
         streamAutoPlayNextEpisodeFallbackEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeFallbackEnabled() ?: true
         streamAutoPlayPreferBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayPreferBingeGroup() ?: true
         streamAutoPlayReuseBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayReuseBingeGroup() ?: true
-        nextEpisodeThresholdMode = PlayerSettingsStorage.loadNextEpisodeThresholdMode()
+        val storedThresholdMode = PlayerSettingsStorage.loadNextEpisodeThresholdMode()
+        val storedThresholdPercent = PlayerSettingsStorage.loadNextEpisodeThresholdPercent()
+        val storedThresholdMinutes = PlayerSettingsStorage.loadNextEpisodeThresholdMinutesBeforeEnd()
+        nextEpisodeThresholdCustomized = storedThresholdMode != null ||
+            storedThresholdPercent != null ||
+            storedThresholdMinutes != null
+        nextEpisodeThresholdMode = storedThresholdMode
             ?.let { runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrNull() }
             ?: NextEpisodeThresholdMode.PERCENTAGE
-        nextEpisodeThresholdPercent = PlayerSettingsStorage.loadNextEpisodeThresholdPercent() ?: 96f
-        nextEpisodeThresholdMinutesBeforeEnd = PlayerSettingsStorage.loadNextEpisodeThresholdMinutesBeforeEnd() ?: 2f
+        nextEpisodeThresholdPercent = storedThresholdPercent ?: 96f
+        nextEpisodeThresholdMinutesBeforeEnd = storedThresholdMinutes ?: 2f
         useLibass = PlayerSettingsStorage.loadUseLibass() ?: false
         libassRenderType = PlayerSettingsStorage.loadLibassRenderType() ?: "CUES"
         iosVideoOutputPreset = PlayerSettingsStorage.loadIosVideoOutputPreset()
@@ -757,6 +766,7 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (nextEpisodeThresholdMode == mode) return
         nextEpisodeThresholdMode = mode
+        nextEpisodeThresholdCustomized = true
         publish()
         PlayerSettingsStorage.saveNextEpisodeThresholdMode(mode.name)
     }
@@ -765,6 +775,7 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (nextEpisodeThresholdPercent == percent) return
         nextEpisodeThresholdPercent = percent
+        nextEpisodeThresholdCustomized = true
         publish()
         PlayerSettingsStorage.saveNextEpisodeThresholdPercent(percent)
     }
@@ -773,6 +784,7 @@ object PlayerSettingsRepository {
         ensureLoaded()
         if (nextEpisodeThresholdMinutesBeforeEnd == minutes) return
         nextEpisodeThresholdMinutesBeforeEnd = minutes
+        nextEpisodeThresholdCustomized = true
         publish()
         PlayerSettingsStorage.saveNextEpisodeThresholdMinutesBeforeEnd(minutes)
     }
@@ -1012,6 +1024,7 @@ object PlayerSettingsRepository {
             nextEpisodeThresholdMode = nextEpisodeThresholdMode,
             nextEpisodeThresholdPercent = nextEpisodeThresholdPercent,
             nextEpisodeThresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEnd,
+            nextEpisodeThresholdCustomized = nextEpisodeThresholdCustomized,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
             iosVideoOutputPreset = iosVideoOutputPreset,

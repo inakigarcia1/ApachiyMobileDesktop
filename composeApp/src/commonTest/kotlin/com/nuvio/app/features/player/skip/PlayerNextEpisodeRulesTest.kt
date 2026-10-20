@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class PlayerNextEpisodeRulesTest {
 
     @Test
-    fun withoutCreditsTheCardOpensAt96PercentAndSourcesPreload15SecondsEarlier() {
+    fun withoutCreditsA40MinuteSeriesOpens30SecondsBeforeTheEnd() {
         val durationMs = 40 * 60_000L
         val promptAt = PlayerNextEpisodeRules.nextEpisodePromptPositionMs(
             durationMs = durationMs,
@@ -16,8 +16,9 @@ class PlayerNextEpisodeRulesTest {
             thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
             thresholdPercent = PlayerNextEpisodeRules.THRESHOLD_PERCENT_DEFAULT,
             thresholdMinutesBeforeEnd = 2f,
+            useAdaptiveLead = true,
         )
-        assertEquals(2_304_000L, promptAt)
+        assertEquals(2_370_000L, promptAt)
         assertFalse(
             PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
                 positionMs = promptAt!! - 1,
@@ -26,6 +27,7 @@ class PlayerNextEpisodeRulesTest {
                 thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
                 thresholdPercent = PlayerNextEpisodeRules.THRESHOLD_PERCENT_DEFAULT,
                 thresholdMinutesBeforeEnd = 2f,
+                useAdaptiveLead = true,
             )
         )
         assertTrue(
@@ -36,6 +38,7 @@ class PlayerNextEpisodeRulesTest {
                 thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
                 thresholdPercent = PlayerNextEpisodeRules.THRESHOLD_PERCENT_DEFAULT,
                 thresholdMinutesBeforeEnd = 2f,
+                useAdaptiveLead = true,
             )
         )
         assertFalse(
@@ -46,8 +49,49 @@ class PlayerNextEpisodeRulesTest {
                 thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
                 thresholdPercent = PlayerNextEpisodeRules.THRESHOLD_PERCENT_DEFAULT,
                 thresholdMinutesBeforeEnd = 2f,
+                useAdaptiveLead = true,
             )
         )
+    }
+
+    @Test
+    fun withoutCreditsA40MinuteAnimeOpens75SecondsBeforeTheEnd() {
+        val promptAt = PlayerNextEpisodeRules.nextEpisodePromptPositionMs(
+            durationMs = 40 * 60_000L,
+            skipIntervals = emptyList(),
+            thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+            thresholdPercent = 96f,
+            thresholdMinutesBeforeEnd = 2f,
+            useAdaptiveLead = true,
+            anime = true,
+        )
+        assertEquals(40 * 60_000L - 75_000L, promptAt)
+    }
+
+    @Test
+    fun twoHoursOrLongerOpens150SecondsBeforeTheEnd() {
+        val promptAt = PlayerNextEpisodeRules.nextEpisodePromptPositionMs(
+            durationMs = 150 * 60_000L,
+            skipIntervals = emptyList(),
+            thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+            thresholdPercent = 96f,
+            thresholdMinutesBeforeEnd = 2f,
+            useAdaptiveLead = true,
+            anime = true,
+        )
+        assertEquals(150 * 60_000L - 150_000L, promptAt)
+    }
+
+    @Test
+    fun aSavedPercentageStillUsesThatPercentage() {
+        val promptAt = PlayerNextEpisodeRules.nextEpisodePromptPositionMs(
+            durationMs = 40 * 60_000L,
+            skipIntervals = emptyList(),
+            thresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+            thresholdPercent = 96f,
+            thresholdMinutesBeforeEnd = 2f,
+        )
+        assertEquals(2_304_000L, promptAt)
     }
 
     @Test

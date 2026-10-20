@@ -4,11 +4,14 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.State
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
+import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.roundToLong
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -25,6 +28,7 @@ internal fun Modifier.playerSurfaceTapGestures(
     revealLockedOverlayState: State<() -> Unit>,
 ): Modifier =
     pointerInput(layoutSize, sideGestureSystemEdgeExclusionPx) {
+        val gestureScope = CoroutineScope(coroutineContext)
         var pendingTap: Job? = null
         var lastUpUptime = 0L
         var lastUpPosition = Offset.Unspecified
@@ -74,17 +78,18 @@ internal fun Modifier.playerSurfaceTapGestures(
                 return@awaitEachGesture
             }
             val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis
+            val release = up as PointerInputChange
             val isDouble = lastUpUptime != 0L &&
-                up.uptimeMillis - lastUpUptime <= doubleTapTimeout &&
-                (up.position - lastUpPosition).getDistance() <= slop * 2
+                release.uptimeMillis - lastUpUptime <= doubleTapTimeout &&
+                (release.position - lastUpPosition).getDistance() <= slop * 2
             if (isDouble) {
                 lastUpUptime = 0L
-                onSurfaceDoubleTap.value(up.position)
+                onSurfaceDoubleTap.value(release.position)
             } else {
-                lastUpUptime = up.uptimeMillis
-                lastUpPosition = up.position
-                val tapPosition = up.position
-                pendingTap = launch {
+                lastUpUptime = release.uptimeMillis
+                lastUpPosition = release.position
+                val tapPosition = release.position
+                pendingTap = gestureScope.launch {
                     delay(doubleTapTimeout)
                     onSurfaceTap.value(tapPosition)
                 }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.action_close
 import nuvio.composeapp.generated.resources.compose_player_episode_title_format
 import nuvio.composeapp.generated.resources.detail_btn_play
 import nuvio.composeapp.generated.resources.player_next_episode
@@ -188,6 +190,18 @@ fun NextEpisodeCard(
                     modifier = Modifier.padding(start = 3.dp),
                 )
             }
+
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = stringResource(Res.string.action_close),
+                tint = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDismiss)
+                    .padding(6.dp),
+            )
         }
     }
 }

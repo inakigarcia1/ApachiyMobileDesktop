@@ -571,6 +571,7 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         autoSkippedIntervalKeys.clear()
         playerNotificationMessage = ""
         showNextEpisodeCard = false
+        nextEpisodeCardDismissed = false
         preloadedNextEpisodeVideoId = null
         nextEpisodeAutoPlayJob?.cancel()
         nextEpisodeAutoPlaySearching = false
@@ -732,9 +733,38 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         playerSettingsUiState.nextEpisodeThresholdMode,
         playerSettingsUiState.nextEpisodeThresholdPercent,
         playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+        playerSettingsUiState.nextEpisodeThresholdCustomized,
+        metaUiState.meta?.genres,
+        metaUiState.meta?.country,
+        contentType,
+        activeVideoId,
+        parentMetaId,
     ) {
         val upcoming = nextEpisodeInfo
         val durationMs = playbackSnapshot.durationMs
+        val useAdaptiveLead = !playerSettingsUiState.nextEpisodeThresholdCustomized
+        val anime = PlayerNextEpisodeRules.isAnimePlayback(
+            contentType = contentType ?: parentMetaType,
+            ids = listOf(activeVideoId, parentMetaId),
+            genres = metaUiState.meta?.genres.orEmpty(),
+            country = metaUiState.meta?.country,
+        )
+        val promptAtMs = if (durationMs > 0L) {
+            PlayerNextEpisodeRules.nextEpisodePromptPositionMs(
+                durationMs = durationMs,
+                skipIntervals = skipIntervals,
+                thresholdMode = playerSettingsUiState.nextEpisodeThresholdMode,
+                thresholdPercent = playerSettingsUiState.nextEpisodeThresholdPercent,
+                thresholdMinutesBeforeEnd = playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+                useAdaptiveLead = useAdaptiveLead,
+                anime = anime,
+            )
+        } else {
+            null
+        }
+        if (promptAtMs != null && playbackSnapshot.positionMs < promptAtMs) {
+            nextEpisodeCardDismissed = false
+        }
         if (
             upcoming != null &&
             upcoming.hasAired &&
@@ -747,6 +777,8 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
                 thresholdMode = playerSettingsUiState.nextEpisodeThresholdMode,
                 thresholdPercent = playerSettingsUiState.nextEpisodeThresholdPercent,
                 thresholdMinutesBeforeEnd = playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+                useAdaptiveLead = useAdaptiveLead,
+                anime = anime,
             )
         ) {
             val panelBlocksPreload = episodeStreamsPanelState.showStreams &&
@@ -775,15 +807,10 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
             showNextEpisodeCard = false
             return@LaunchedEffect
         }
-        val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
-            positionMs = playbackSnapshot.positionMs,
-            durationMs = playbackSnapshot.durationMs,
-            skipIntervals = skipIntervals,
-            thresholdMode = playerSettingsUiState.nextEpisodeThresholdMode,
-            thresholdPercent = playerSettingsUiState.nextEpisodeThresholdPercent,
-            thresholdMinutesBeforeEnd = playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
-        )
-        if (shouldShow && !showNextEpisodeCard) {
+        val shouldShow = promptAtMs != null && playbackSnapshot.positionMs >= promptAtMs
+        if (nextEpisodeCardDismissed) {
+            showNextEpisodeCard = false
+        } else if (shouldShow && !showNextEpisodeCard) {
             showNextEpisodeCard = true
             if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
                 playNextEpisode()
@@ -794,15 +821,21 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     }
 
     LaunchedEffect(playbackSnapshot.isEnded, playbackSnapshot.isLoading, nextEpisodeInfo) {
+        val upcoming = nextEpisodeInfo
         if (
             playbackSnapshot.isEnded &&
             !playbackSnapshot.isLoading &&
-            nextEpisodeInfo != null &&
-            !showNextEpisodeCard
+            upcoming != null
         ) {
-            showNextEpisodeCard = true
-            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
-                playNextEpisode()
+            if (nextEpisodeCardDismissed) {
+                if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && upcoming.hasAired) {
+                    playNextEpisode()
+                }
+            } else if (!showNextEpisodeCard) {
+                showNextEpisodeCard = true
+                if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && upcoming.hasAired) {
+                    playNextEpisode()
+                }
             }
         }
     }

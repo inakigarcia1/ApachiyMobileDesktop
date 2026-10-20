@@ -65,6 +65,7 @@ const skipPrompt = document.getElementById("skipPrompt");
 const skipPromptLabel = document.getElementById("skipPromptLabel");
 const skipPromptProgress = document.getElementById("skipPromptProgress");
 const nextEpisodeCard = document.getElementById("nextEpisodeCard");
+const nextEpisodeClose = document.getElementById("nextEpisodeClose");
 const nextEpisodeThumb = document.getElementById("nextEpisodeThumb");
 const nextEpisodeHeader = document.getElementById("nextEpisodeHeader");
 const nextEpisodeTitle = document.getElementById("nextEpisodeTitle");
@@ -2950,6 +2951,11 @@ nextEpisodeCard.addEventListener("click", event => {
   if (state.nextEpisodePlayable) {
     send("playNextEpisode", 0);
   }
+});
+
+nextEpisodeClose.addEventListener("click", event => {
+  event.stopPropagation();
+  send("dismissNextEpisode", 0);
 });
 
 seek.addEventListener("input", () => {

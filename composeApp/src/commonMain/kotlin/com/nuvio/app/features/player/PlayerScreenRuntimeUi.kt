@@ -986,6 +986,14 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                 playNextEpisode()
             }
         }
+        "dismissNextEpisode" -> {
+            nextEpisodeAutoPlayJob?.cancel()
+            nextEpisodeCardDismissed = true
+            showNextEpisodeCard = false
+            nextEpisodeAutoPlaySearching = false
+            nextEpisodeAutoPlaySourceName = null
+            nextEpisodeAutoPlayCountdown = null
+        }
         "enableP2pForPlayerControls" -> enableP2pForPlayerControls()
         "cancelP2pForPlayerControls" -> {
             playerControlsPendingP2pSwitch = null
@@ -1693,6 +1701,7 @@ private fun BoxScope.RenderPlaybackOverlays(
             },
             onDismissNextEpisode = {
                 nextEpisodeAutoPlayJob?.cancel()
+                nextEpisodeCardDismissed = true
                 showNextEpisodeCard = false
                 nextEpisodeAutoPlaySearching = false
                 nextEpisodeAutoPlaySourceName = null

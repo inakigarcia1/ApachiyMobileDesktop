@@ -734,6 +734,28 @@ button:disabled {
   opacity: .72;
 }
 
+.next-episode-card.playable {
+  cursor: pointer;
+}
+
+.next-episode-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  color: rgba(255, 255, 255, .8);
+}
+
+.next-episode-close svg {
+  width: 14px;
+  height: 14px;
+}
+
 .next-episode-action svg {
   width: 13px;
   height: 13px;

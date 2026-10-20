@@ -174,7 +174,7 @@
         </span>
       </button>
 
-      <button class="next-episode-card" id="nextEpisodeCard" type="button" aria-hidden="true">
+      <div class="next-episode-card" id="nextEpisodeCard" aria-hidden="true">
         <span class="next-episode-thumb">
           <img id="nextEpisodeThumb" alt="">
         </span>
@@ -187,7 +187,10 @@
           <svg><use href="#icon-play"></use></svg>
           <span id="nextEpisodeAction">Play</span>
         </span>
-      </button>
+        <button class="next-episode-close" id="nextEpisodeClose" type="button" aria-label="Close">
+          <svg><use href="#icon-close"></use></svg>
+        </button>
+      </div>
 
       <section class="progress" aria-label="Playback progress">
         <section class="metadata" aria-label="Playback metadata">
