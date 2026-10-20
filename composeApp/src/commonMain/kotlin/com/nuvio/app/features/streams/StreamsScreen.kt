@@ -85,6 +85,12 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
@@ -966,7 +972,7 @@ internal fun ProviderFilterRow(
     if (showOrderHelp) {
         AlertDialog(
             onDismissRequest = { showOrderHelp = false },
-            text = { Text(stringResource(Res.string.streams_order_help_message)) },
+            text = { StreamsOrderHelpMessage() },
             confirmButton = {
                 TextButton(onClick = { showOrderHelp = false }) {
                     Text(stringResource(Res.string.action_close))
@@ -974,6 +980,37 @@ internal fun ProviderFilterRow(
             },
         )
     }
+}
+
+private const val STREAMS_ORDER_HELP_URL = "https://apachiy.org/dashboard/settings"
+
+@Composable
+private fun StreamsOrderHelpMessage() {
+    val message = stringResource(Res.string.streams_order_help_message)
+    val urlStart = message.indexOf(STREAMS_ORDER_HELP_URL)
+    if (urlStart < 0) {
+        Text(message)
+        return
+    }
+    Text(
+        buildAnnotatedString {
+            append(message.substring(0, urlStart))
+            withLink(
+                LinkAnnotation.Url(
+                    STREAMS_ORDER_HELP_URL,
+                    TextLinkStyles(
+                        SpanStyle(
+                            color = Color(0xFFE8A91C),
+                            textDecoration = TextDecoration.Underline,
+                        ),
+                    ),
+                ),
+            ) {
+                append(STREAMS_ORDER_HELP_URL)
+            }
+            append(message.substring(urlStart + STREAMS_ORDER_HELP_URL.length))
+        },
+    )
 }
 
 @Composable
