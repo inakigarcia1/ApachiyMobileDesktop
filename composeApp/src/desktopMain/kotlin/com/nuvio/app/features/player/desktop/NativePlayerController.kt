@@ -474,6 +474,7 @@ internal class NativePlayerController(
         val presentationKey = NativeControlsPresentationKey(
             showOpeningOverlay = stateWithVolume.showOpeningOverlay,
             controlsVisible = stateWithVolume.controlsVisible,
+            notificationToken = stateWithVolume.notificationToken,
         )
         if (structureKey == lastSentControlsStructureKey &&
             presentationKey == lastSentControlsPresentationKey
@@ -1500,6 +1501,7 @@ private data class NativeControlsStructureKey(
 private data class NativeControlsPresentationKey(
     val showOpeningOverlay: Boolean,
     val controlsVisible: Boolean,
+    val notificationToken: Long,
 )
 
 private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =

@@ -161,8 +161,13 @@ private suspend fun PlayerScreenRuntime.handOffToDesktopAudioSync(
 
 internal fun PlayerScreenRuntime.showAutoSyncNotice(message: String) {
     if (!ApachiyProductSettings.operatorSettingsVisible) return
-    playerNotificationMessage = message
-    playerNotificationToken += 1L
+    if (!::scope.isInitialized) return
+    // Audio sync posts this from a background dispatcher. Compose only republishes
+    // the player toast when the write happens on the UI scope.
+    scope.launch {
+        playerNotificationMessage = message
+        playerNotificationToken += 1L
+    }
 }
 
 internal fun PlayerScreenRuntime.cancelCommunityAutoSync() {
