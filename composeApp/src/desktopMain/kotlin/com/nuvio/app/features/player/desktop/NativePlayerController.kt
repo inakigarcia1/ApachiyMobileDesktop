@@ -138,6 +138,7 @@ internal class NativePlayerController(
     private var audioStallNotifiedIndex = -1
     private var pendingSubtitleDelayMs: Int? = null
     private var pendingSubtitleStyle: SubtitleStyleState? = null
+    private var pendingExternalSubtitleUrl: String? = null
     private var pendingUseLibass: Boolean = false
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
     private var lastSentControlsPresentationKey: NativeControlsPresentationKey? = null
@@ -378,6 +379,7 @@ internal class NativePlayerController(
                         applyRememberedVolume()
                         updateControls(controlsState)
                         setResizeMode(rememberedResizeMode)
+                        applyPendingExternalSubtitle(created)
                         applyPendingSubtitleSettings()
                     }
                 }.onFailure { error ->
@@ -1084,6 +1086,7 @@ internal class NativePlayerController(
     }
 
     override fun selectSubtitleTrack(index: Int) {
+        pendingExternalSubtitleUrl = null
         val current = handle.takeIf { it != 0L } ?: return
         if (index < 0) {
             log.d { "selectSubtitleTrack off handle=$current" }
@@ -1102,20 +1105,20 @@ internal class NativePlayerController(
 
     override fun setSubtitleUri(url: String) {
         log.d { "setSubtitleUri ${url.toPlaybackLogKey()} handle=$handle" }
-        val current = handle.takeIf { it != 0L }
-        current?.let { attached ->
-            NativePlayerBridge.clearExternalSubtitles(attached)
-            NativePlayerBridge.addSubtitleUrl(attached, url)
-            applyPendingSubtitleSettings()
-        }
+        pendingExternalSubtitleUrl = url
+        val current = handle.takeIf { it != 0L } ?: return
+        applyPendingExternalSubtitle(current)
+        applyPendingSubtitleSettings()
     }
 
     override fun clearExternalSubtitle() {
         log.d { "clearExternalSubtitle handle=$handle" }
+        pendingExternalSubtitleUrl = null
         handle.takeIf { it != 0L }?.let(NativePlayerBridge::clearExternalSubtitles)
     }
 
     override fun clearExternalSubtitleAndSelect(trackIndex: Int) {
+        pendingExternalSubtitleUrl = null
         val current = handle.takeIf { it != 0L } ?: return
         val trackId = if (trackIndex < 0) {
             -1
@@ -1135,6 +1138,7 @@ internal class NativePlayerController(
         val current = handle.takeIf { it != 0L } ?: return false
         val file = File(System.getProperty("java.io.tmpdir"), "apachiy-autosync-${sourceUrl.hashCode()}.srt")
         file.writeText(body)
+        pendingExternalSubtitleUrl = file.absolutePath
         NativePlayerBridge.clearExternalSubtitles(current)
         NativePlayerBridge.addSubtitleUrl(current, file.absolutePath)
         NativePlayerBridge.setSubtitleDelayMs(current, 0)
@@ -1157,6 +1161,12 @@ internal class NativePlayerController(
         handle.takeIf { it != 0L }?.let { current ->
             applySubtitleStyle(current, style, useLibass)
         }
+    }
+
+    private fun applyPendingExternalSubtitle(current: Long) {
+        val url = pendingExternalSubtitleUrl ?: return
+        NativePlayerBridge.clearExternalSubtitles(current)
+        NativePlayerBridge.addSubtitleUrl(current, url)
     }
 
     private fun applyPendingSubtitleSettings() {

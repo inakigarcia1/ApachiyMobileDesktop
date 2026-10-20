@@ -112,7 +112,9 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             }
             return@launch
         }
-        if (appliedAddonSubtitleUrl != null && appliedAddonSubtitleUrl != attempt.subtitleUrl) return@launch
+        // OpenSubtitles replaces the addon file. That URL differs on purpose.
+        // Bail only when the user picked another subtitle while this run was in flight.
+        if (appliedAddonSubtitleUrl != null && appliedAddonSubtitleUrl != subtitleUrl) return@launch
         val withinToleranceMs = selectedSubtitleWithinToleranceMs(
             toleranceMs = effectiveSyncToleranceMsForCommunity(),
             result = attempt.timeline,

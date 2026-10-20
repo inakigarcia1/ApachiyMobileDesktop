@@ -3135,7 +3135,7 @@ window.playerControls = nextState => {
   }
   const notificationToken = Number(state.notificationToken) || 0;
   if (notificationToken !== previousNotificationToken) {
-    showPlayerToast(state.notificationMessage);
+    showPlayerToast(state.notificationMessage, { durationMs: 4500 });
   }
   if (state.showP2pConsent && activeModal !== "p2pConsent") {
     openPlayerModal("p2pConsent");
