@@ -77,7 +77,7 @@ data class ProfileState(
     val activeProfile: NuvioProfile? = null,
     val isLoaded: Boolean = false,
     val hasEverSelectedProfile: Boolean = false,
-    val rememberLastProfileEnabled: Boolean = false,
+    val rememberLastProfileEnabled: Boolean = true,
 )
 
 @Serializable

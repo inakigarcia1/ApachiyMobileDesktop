@@ -41,6 +41,8 @@ object AuthRepository {
     private var initialized = false
     private var sessionStatusJob: Job? = null
     private var validatedRemoteUserId: String? = null
+    private var initialSessionSettled = false
+    private var initialSessionResolveStarted = false
 
     var lastAuthKind: LastAuthKind = LastAuthKind.None
         private set
@@ -53,6 +55,7 @@ object AuthRepository {
             SupabaseProvider.client.auth.sessionStatus.collect { status ->
                 when (status) {
                     is SessionStatus.Authenticated -> {
+                        initialSessionSettled = true
                         val user = status.session.user
                         val userId = user?.id.orEmpty()
                         if (!validateRemoteSession(userId)) return@collect
@@ -63,8 +66,16 @@ object AuthRepository {
                         )
                     }
                     is SessionStatus.NotAuthenticated -> {
-                        // Supabase emits this during refresh gaps; keep persisted refresh tokens
-                        // until explicit sign-out or a definitive invalid_grant from the server.
+                        // Supabase emits this before the saved session is read, and again
+                        // during refresh gaps. Don't show login until that first read finishes.
+                        if (!initialSessionSettled) {
+                            if (!initialSessionResolveStarted) {
+                                initialSessionResolveStarted = true
+                                _state.value = AuthState.Loading
+                                scope.launch { resolveInitialStoredSession() }
+                            }
+                            return@collect
+                        }
                         applyCachedSessionOrUnauthenticated()
                         if (hasPersistedSession()) {
                             scope.launch { refreshCurrentSession() }
@@ -158,6 +169,23 @@ object AuthRepository {
                 log.w(e) { "Unable to validate stored Supabase session; keeping cached auth state" }
                 true
             }
+        }
+    }
+
+    private suspend fun resolveInitialStoredSession() {
+        repeat(30) {
+            val session = SupabaseProvider.client.auth.currentSessionOrNull()
+            val userId = session?.user?.id.orEmpty()
+            if (userId.isNotBlank()) {
+                initialSessionSettled = true
+                applyCachedSessionOrUnauthenticated()
+                return
+            }
+            delay(100)
+        }
+        initialSessionSettled = true
+        if (_state.value is AuthState.Loading) {
+            applyCachedSessionOrUnauthenticated()
         }
     }
 
@@ -312,6 +340,8 @@ object AuthRepository {
         sessionStatusJob = null
         initialized = false
         validatedRemoteUserId = null
+        initialSessionSettled = false
+        initialSessionResolveStarted = false
         _state.value = AuthState.Loading
         initialize()
     }

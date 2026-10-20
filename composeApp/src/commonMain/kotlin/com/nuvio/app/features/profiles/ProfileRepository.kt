@@ -62,7 +62,8 @@ private data class StoredProfilePayload(
     val userId: String,
     val activeProfileIndex: Int = 1,
     val hasEverSelectedProfile: Boolean = false,
-    val rememberLastProfileEnabled: Boolean = false,
+    val rememberLastProfileEnabled: Boolean = true,
+    val rememberLastProfileChosen: Boolean = false,
     val profiles: List<NuvioProfile> = emptyList(),
 )
 
@@ -78,11 +79,16 @@ object ProfileRepository {
 
     private var activeProfileIndex: Int = 1
     private var loadedCacheForUserId: String? = null
+    private var rememberLastProfileChosen: Boolean = false
 
     val activeProfileId: Int get() = activeProfileIndex
 
     fun setRememberLastProfileEnabled(enabled: Boolean) {
-        if (_state.value.rememberLastProfileEnabled == enabled) return
+        rememberLastProfileChosen = true
+        if (_state.value.rememberLastProfileEnabled == enabled) {
+            persist()
+            return
+        }
 
         _state.value = _state.value.copy(rememberLastProfileEnabled = enabled)
         persist()
@@ -461,12 +467,15 @@ object ProfileRepository {
     private fun applyStoredPayload(stored: StoredProfilePayload) {
         val profiles = stored.profiles.sortedBy { it.profileIndex }
         activeProfileIndex = stored.activeProfileIndex
+        // Saved false with no explicit choice is the old default, not a user opt-out.
+        val remember = if (stored.rememberLastProfileChosen) stored.rememberLastProfileEnabled else true
+        rememberLastProfileChosen = true
         _state.value = ProfileState(
             profiles = profiles,
             activeProfile = profiles.find { it.profileIndex == activeProfileIndex } ?: profiles.firstOrNull(),
             isLoaded = profiles.isNotEmpty(),
             hasEverSelectedProfile = stored.hasEverSelectedProfile,
-            rememberLastProfileEnabled = stored.rememberLastProfileEnabled,
+            rememberLastProfileEnabled = remember,
         )
         _state.value.activeProfile?.let { activeProfileIndex = it.profileIndex }
         syncPinCache(profiles)
@@ -563,6 +572,7 @@ object ProfileRepository {
                     activeProfileIndex = activeProfileIndex,
                     hasEverSelectedProfile = state.hasEverSelectedProfile,
                     rememberLastProfileEnabled = state.rememberLastProfileEnabled,
+                    rememberLastProfileChosen = rememberLastProfileChosen,
                     profiles = state.profiles,
                 ),
             ),
