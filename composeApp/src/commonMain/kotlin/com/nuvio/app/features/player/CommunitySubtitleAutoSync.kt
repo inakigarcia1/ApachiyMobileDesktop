@@ -11,6 +11,7 @@ import com.nuvio.app.features.autosync.selectedSubtitleWithinToleranceMs
 import com.nuvio.app.features.player.embedded.DialogueTimingIndex
 import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
 import com.nuvio.app.isIos
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 internal suspend fun PlayerScreenRuntime.loadDialogueTimingIndex(): DialogueTimingIndex {
@@ -56,20 +57,27 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
     val syncVideoId = activeVideoId?.takeIf { it.isNotBlank() }
     communityAutoSyncJob = scope.launch {
         showAutoSyncNotice("Auto Sync V2 started")
+        val extrasDeferred = async {
+            if (syncContentType == null || syncVideoId == null) {
+                emptyList()
+            } else {
+                OpenSubtitlesExtraCandidates.load(syncContentType, syncVideoId).map { it.url }
+            }
+        }
         var index = loadDialogueTimingIndex()
-        if (index.hasEmbeddedSpanish) return@launch
+        if (index.hasEmbeddedSpanish) {
+            extrasDeferred.cancel()
+            return@launch
+        }
         if (index.tracks.isEmpty() && index.noSubtitleTracks) {
+            extrasDeferred.cancel()
             handOffToDesktopAudioSync(subtitleUrl, headers, syncContentType, syncVideoId)
             return@launch
         }
+        val extraUrls = extrasDeferred.await()
         if (index.tracks.isEmpty()) {
             showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
             return@launch
-        }
-        val extraUrls = if (syncContentType != null && syncVideoId != null) {
-            OpenSubtitlesExtraCandidates.load(syncContentType, syncVideoId).map { it.url }
-        } else {
-            emptyList()
         }
         var attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
             index = index,

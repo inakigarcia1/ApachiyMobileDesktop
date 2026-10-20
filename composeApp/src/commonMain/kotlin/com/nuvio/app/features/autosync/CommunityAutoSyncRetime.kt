@@ -23,7 +23,7 @@ internal object CommunityAutoSyncRetime {
     ): CommunityAutoSyncAttempt? {
         val primary = attemptOne(index.tracks, subtitleUrl, headers) ?: run {
             val extras = extraSubtitleUrls.filter { it.isNotBlank() && it != subtitleUrl }
-            extras.firstNotNullOfOrNull { url -> attemptOne(index.tracks, url, headers) }
+            extras.firstNotNullOfOrNull { url -> attemptOne(index.tracks, url, emptyMap()) }
         }
         return primary
     }
