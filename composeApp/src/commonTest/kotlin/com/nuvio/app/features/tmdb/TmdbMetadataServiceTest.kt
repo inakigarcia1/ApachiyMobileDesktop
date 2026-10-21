@@ -71,7 +71,7 @@ class TmdbMetadataServiceTest {
         )
         val enrichment = TmdbEnrichment(
             localizedTitle = "Localized",
-            description = "TMDB description",
+            description = "La historia de un hombre que vuelve a casa.",
             genres = listOf("Drama", "Mystery"),
             backdrop = "https://example.com/backdrop.jpg",
             logo = "https://example.com/logo.png",
@@ -107,7 +107,7 @@ class TmdbMetadataServiceTest {
         )
 
         assertEquals("Localized", result.name)
-        assertEquals("TMDB description", result.description)
+        assertEquals("La historia de un hombre que vuelve a casa.", result.description)
         assertEquals(listOf("Drama", "Mystery"), result.genres)
         assertEquals("8.4", result.imdbRating)
         assertEquals("TV-MA", result.ageRating)
@@ -436,5 +436,62 @@ class TmdbMetadataServiceTest {
 
         assertEquals("Chibi Maruko-chan", titles[57775])
         assertEquals("One Piece", titles[37854])
+    }
+
+    @Test
+    fun `applyEnrichment keeps a spanish addon synopsis when tmdb returns english`() {
+        val spanish = "La historia de un hombre que vuelve a casa."
+        val episodeSpanish = "Vuelve a casa después de la guerra y encuentra a su familia."
+        val base = MetaDetails(
+            id = "tt1",
+            type = "series",
+            name = "Original",
+            description = spanish,
+            videos = listOf(
+                MetaVideo(
+                    id = "ep1",
+                    title = "Capítulo",
+                    season = 1,
+                    episode = 1,
+                    overview = episodeSpanish,
+                ),
+            ),
+        )
+        val enrichment = TmdbEnrichment(
+            localizedTitle = null,
+            description = "The story of a man who comes back home after the war.",
+            genres = emptyList(),
+            backdrop = null,
+            logo = null,
+            poster = null,
+            people = emptyList(),
+            director = emptyList(),
+            writer = emptyList(),
+            releaseInfo = null,
+            rating = null,
+            runtimeMinutes = null,
+            ageRating = null,
+            status = null,
+            countries = emptyList(),
+            language = null,
+            productionCompanies = emptyList(),
+            networks = emptyList(),
+        )
+        val result = TmdbMetadataService.applyEnrichment(
+            meta = base,
+            enrichment = enrichment,
+            episodeMap = mapOf(
+                (1 to 1) to TmdbEpisodeEnrichment(
+                    title = "Pilot",
+                    overview = "He returns home after the war and finds the house empty.",
+                    thumbnail = null,
+                    airDate = null,
+                    runtimeMinutes = null,
+                ),
+            ),
+            settings = TmdbSettings(useBasicInfo = true, useEpisodes = true),
+        )
+        assertEquals(spanish, result.description)
+        assertEquals(episodeSpanish, result.videos.first().overview)
     }
 }

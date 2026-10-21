@@ -792,7 +792,7 @@ object TmdbMetadataService {
         if (enrichment != null && settings.useBasicInfo) {
             updated = updated.copy(
                 name = enrichment.localizedTitle ?: updated.name,
-                description = enrichment.description ?: updated.description,
+                description = chooseSynopsis(enrichment.description, updated.description),
                 imdbRating = updated.imdbRating?.takeIf { it.isNotBlank() }
                     ?: enrichment.rating?.formatRating(),
                 genres = enrichment.genres.ifEmpty { updated.genres },
@@ -849,7 +849,7 @@ object TmdbMetadataService {
                                 video.title
                             },
                             overview = if (settings.useEpisodes) {
-                                enrichmentForEpisode.overview ?: video.overview
+                                chooseSynopsis(enrichmentForEpisode.overview, video.overview)
                             } else {
                                 video.overview
                             },
