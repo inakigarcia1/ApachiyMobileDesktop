@@ -37,7 +37,7 @@ internal object OpenSubtitlesExtraCandidates {
             array.mapNotNull { item ->
                 val subtitleUrl = item.url.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val language = item.lang
-                if (!SubtitleLanguageMatching.matchesLanguageCode(language, SPANISH_SYNC_LANGUAGE)) {
+                if (!SubtitleLanguageMatching.sharesBaseLanguage(language, SPANISH_SYNC_LANGUAGE)) {
                     return@mapNotNull null
                 }
                 AutoSyncSubtitleCandidate(

@@ -285,6 +285,14 @@ internal object SubtitleLanguageMatching {
         return false
     }
 
+    /** Timing references only need the same language; regional variants (es-419, pt-br) still share dialogue. */
+    fun sharesBaseLanguage(language: String?, target: String): Boolean {
+        if (matchesLanguageCode(language, target)) return true
+        if (language.isNullOrBlank()) return false
+        val base = normalizeLanguageCode(language).substringBefore('-')
+        return base.isNotBlank() && base == normalizeLanguageCode(target).substringBefore('-')
+    }
+
     private fun matchesNormalizedLanguage(
         normalizedLanguage: String,
         normalizedTarget: String,
