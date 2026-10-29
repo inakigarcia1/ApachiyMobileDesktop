@@ -56,6 +56,8 @@ internal object AutoSyncTimelineRetimer {
     private const val ACTIVITY_MIN_SCALE = 0.94
     private const val ACTIVITY_MAX_SCALE = 1.06
     private const val ACTIVITY_SCALE_DEDUP = 0.00035
+    private const val ACTIVITY_SATURATED_FRACTION = 0.90
+    private const val ACTIVITY_ONSET_MS = 600L
 
     // Cheap delay-only fast path. It always APPLIES scale=1.0; the segment drift tolerance
     // merely allows near-1.0 timelines to qualify when one constant delay remains visually valid.
@@ -132,6 +134,9 @@ internal object AutoSyncTimelineRetimer {
         }
         return normalized
     }
+
+    private fun onsetCues(cues: List<SubtitleSyncCue>): List<SubtitleSyncCue> =
+        cues.map { it.copy(endTimeMs = it.startTimeMs + ACTIVITY_ONSET_MS) }
 
     internal fun prepareUnitActivity(
         cues: List<SubtitleSyncCue>,
@@ -224,17 +229,31 @@ internal object AutoSyncTimelineRetimer {
         }
 
         val prepareMark = if (timingEnabled) TimeSource.Monotonic.markNow() else null
-        val referenceActivity =
+        val intervalReferenceActivity =
             preparedReferenceActivity ?: prepareUnitActivity(reference) ?: return null
-        val targetActivity =
+        // Broadcast subtitles stay on screen until the next line replaces them, so their
+        // intervals cover the whole episode and every offset scores the same. Line starts still
+        // carry the timing: Time S3E1 HDTV lined up 92% of starts at -117.7s, 28% anywhere else.
+        val onsetMode = intervalReferenceActivity.coarse.activeIndexes.size >=
+            intervalReferenceActivity.coarse.bins.size * ACTIVITY_SATURATED_FRACTION
+        val activityReference = if (onsetMode) onsetCues(reference) else reference
+        val activityTarget = if (onsetMode) onsetCues(target) else target
+        val referenceActivity =
+            if (onsetMode) prepareUnitActivity(activityReference) ?: return null else intervalReferenceActivity
+        val targetActivity = if (onsetMode) {
+            prepareUnitActivity(activityTarget) ?: return null
+        } else {
             preparedTargetActivity ?: prepareUnitActivity(target) ?: return null
+        }
+        val delayOnlyHint = precomputedDelayOnly.takeUnless { onsetMode }
+        val delayOnlyEvidence = precomputedDelayOnlyEvidence.takeUnless { onsetMode }
         prepareActivityMs += elapsedMs(prepareMark)
 
         // A precomputed delay can skip affine discovery only when the existing V2
         // delay validator already proved a strong, unambiguous, three-segment constant offset.
         // Structural DP and all final confidence checks still run unchanged. Any failure falls
         // through to the normal affine/FPS discovery path.
-        val fastDelayOnly = precomputedDelayOnly?.takeIf { alignment ->
+        val fastDelayOnly = delayOnlyHint?.takeIf { alignment ->
             allowPrecomputedDelayFastPath &&
                 !allowAmbiguousDelayOnlyMargin &&
                 alignment.score >= DELAY_ONLY_FAST_PATH_MIN_SCORE &&
@@ -283,18 +302,18 @@ internal object AutoSyncTimelineRetimer {
         // or fails structural validation.
         val activityMark = if (timingEnabled) TimeSource.Monotonic.markNow() else null
         val alignment = discoverActivityAlignment(
-            reference = reference,
-            target = target,
+            reference = activityReference,
+            target = activityTarget,
             referenceActivity = referenceActivity,
             targetActivity = targetActivity,
-            precomputedUnitEvidence = precomputedDelayOnlyEvidence,
+            precomputedUnitEvidence = delayOnlyEvidence,
             cancellationCheck = cancellationCheck,
         ) ?: return null
         activitySearchMs += elapsedMs(activityMark)
 
         val delayMark = if (timingEnabled) TimeSource.Monotonic.markNow() else null
         val delayOnly = if (abs(alignment.scale - 1.0) <= DELAY_ONLY_SCALE_TOLERANCE) {
-            precomputedDelayOnly ?: findDelayOnlyAlignmentPrepared(
+            delayOnlyHint ?: findDelayOnlyAlignmentPrepared(
                 referenceActivity = referenceActivity,
                 targetActivity = targetActivity,
                 targetSize = target.size,
@@ -676,7 +695,14 @@ internal object AutoSyncTimelineRetimer {
         val referenceCoverage = matchedReferenceCount.toDouble() / reference.size
         val skippedTarget = target.size - matchedTargetCount
         val skippedReference = reference.size - matchedReferenceCount
-        val longestTargetSkipRun = longestFalseRun(matchedTarget)
+        // Lines that land before the video starts belong to a recap this release cut, so no
+        // reference can match them (Time S3E1 HDTV: the first 32 lines at -80s..-5s).
+        val longestTargetSkipRun = longestFalseRun(
+            BooleanArray(target.size) { index ->
+                matchedTarget[index] ||
+                    target[index].endTimeMs * coarseScale + coarseInterceptMs < 0.0
+            },
+        )
         val averageGroupCost = groups.map { it.cost }.average()
 
         val confident =

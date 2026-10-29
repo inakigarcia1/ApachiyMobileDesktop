@@ -682,6 +682,30 @@ class AutoSyncTimelineRetimeTest {
         assertTrue(drifting.maxAlignmentShiftMs() > 500.0)
     }
 
+    @Test
+    fun alwaysOnBroadcastReferenceAlignsOnLineStarts() {
+        val target = irregularTimeline(900)
+        // The release cut the recap: the target's first ~35 lines fall before the video starts.
+        val shifted = shift(target, -117_700L).filter { it.startTimeMs >= 0L }
+        val reference = shifted.mapIndexed { index, cue ->
+            cue.copy(endTimeMs = shifted.getOrNull(index + 1)?.startTimeMs ?: (cue.startTimeMs + 3_000L))
+        }
+
+        val result = assertNotNull(
+            AutoSyncTimelineRetimer.retime(
+                reference = reference,
+                target = target.filterIndexed { index, _ -> index % 4 != 3 },
+                coarseScale = 1.0,
+                coarseInterceptMs = 0.0,
+                discoverAlignment = true,
+            ),
+        )
+
+        assertTrue(result.confident)
+        assertEquals(1.0, result.alignmentScale)
+        assertTrue(abs(result.alignmentInterceptMs + 117_700.0) <= 300.0, "${result.alignmentInterceptMs}")
+    }
+
     private fun shift(cues: List<SubtitleSyncCue>, deltaMs: Long) = cues.map { cue ->
         cue.copy(startTimeMs = cue.startTimeMs + deltaMs, endTimeMs = cue.endTimeMs + deltaMs)
     }
