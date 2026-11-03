@@ -1,0 +1,12 @@
+---
+description: Autonomous Smallville ffsubsync QA loop on Apachiy Desktop. Apply when the user asks to debug subtitle sync, run the agent-QA sidecar, or play Smallville for Spanish subs.
+alwaysApply: false
+---
+
+Follow `.cursor/skills/apachiy-subsync-loop/SKILL.md`.
+
+Oracle is `qa/runs/current/player-state.json` and `app-state.json`, not screenshots.
+Open Smallville with `write-agent-command.ps1 -Action play_episode`, not Search.
+Never reuse a Smallville episode in the same run.
+Stop at 3 consecutive PASS or a graceful 30 minute budget.
+Login accounts live in `qa/apachiy-subsync-loop/secrets.local.json`.

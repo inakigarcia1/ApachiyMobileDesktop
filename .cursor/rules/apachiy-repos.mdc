@@ -1,0 +1,16 @@
+---
+description: Mobile and desktop live only in this repo
+alwaysApply: true
+---
+
+Este repo (`Apachiy-DesktopMobile`) y sus worktrees son el único lugar de Apachiy Desktop y Apachiy Mobile.
+
+No uses `Apachiy-Mobile`. Ese repo no existe: no lo abras, no lo edites y no generes bundles ahí.
+
+Mobile es `composeApp`, `androidApp` e `iosApp` de este repo. Desktop es el resto de este mismo repo. TV está en `D:\Proyectos\Apachiy-Repos\Apachiy-NuvioFork`.
+
+Si un cambio es para mobile y TV, aplicalo acá y en el repo de TV.
+
+El código de desktop y mobile se commitea y se pushea a `inakigarcia1/ApachiyMobileDesktop` (este repo). `inakigarcia1/ApachiyDesktop` es solo el repo de releases que mira el updater de PC y del APK sideload. Ahí se suben instaladores y APKs. No se clona para editar, no se commitea código y no se pushea código.
+
+Producción Apachiy: MCP **Coolify** disponible; SSH desde este PC con `ssh guardia@51.222.140.201`. Detalle en `Apachiy/.cursor/rules/apachiy-production-access.mdc`.

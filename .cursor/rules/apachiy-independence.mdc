@@ -1,0 +1,8 @@
+---
+description: Apachiy clients are not bound to Nuvio behavior or Stremio addon protocols.
+alwaysApply: true
+---
+
+Apachiy is its own product. Do not treat Nuvio behavior or the Stremio addon protocol as a constraint.
+
+If a protocol, response shape, or client flow gets in the way, change it. Compatibility with third-party addons is not a goal: users cannot install addons. Prefer one simple request over keeping a GET that exists only because Stremio defined it.

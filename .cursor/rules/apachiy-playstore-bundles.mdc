@@ -1,0 +1,28 @@
+---
+description: Play Store bundles are always playstore + release
+alwaysApply: true
+---
+
+Cuando Iñaki pida generar bundles de Play Store (AAB), siempre es:
+
+- **Edición:** `release` (nunca `debug`)
+- **Flavor:** `playstore` (nunca `full` ni sideload)
+- **Backend:** **cloud** (producción: `api.apachiy.org`, Supabase cloud, etc.). **Jamás** infra local.
+
+No uses `assembleFull*`, `bundleFull*`, `installFull*`, ni variantes debug para esa tarea.
+
+Los bundles **siempre** van contra cloud. Iñaki no pide bundles apuntando a localhost, `127.0.0.1`, `10.0.2.2`, `local.dev.properties`, ni `APACHIY_USE_LOCAL_DEV`. No uses `-Pnuvio.useLocalDev=true`, `-Papachiy.useLocalDev=true`, ni scripts `run-*-local*`. Quitá `APACHIY_USE_LOCAL_DEV` del entorno antes de compilar. Config = `local.properties` (cloud), no el overlay de dev local.
+
+**Mobile (este repo):** subí `versionCode` en `iosApp/Configuration/Version.xcconfig` (`CURRENT_PROJECT_VERSION`) antes de compilar. Luego:
+
+```text
+:androidApp:bundlePlaystoreRelease
+-Pnuvio.android.distribution=playstore
+-Pnuvio.useLocalDev=false
+```
+
+Cloud = `local.properties`, sin `APACHIY_USE_LOCAL_DEV`. En PowerShell, los `-P` van entre comillas.
+
+Salida: `androidApp/build/outputs/bundle/playstoreRelease/androidApp-playstore-release.aab`
+
+**TV:** repo `Apachiy-NuvioFork`, misma convención release + playstore. Subí `versionCode` en `app/build.gradle.kts`, luego `:app:bundlePlaystoreRelease` con `-Papachiy.useLocalDev=false`.
