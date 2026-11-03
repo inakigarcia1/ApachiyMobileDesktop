@@ -1,0 +1,14 @@
+---
+description: AutoSync must stay fast and reliable. Never harvest the whole embedded subtitle over HTTP.
+paths:
+  - "composeApp/**/autosync/**/*.kt"
+  - "composeApp/**/CommunitySubtitleAutoSync.kt"
+  - "composeApp/**/embedded/**/*.kt"
+---
+
+AutoSync aligns the selected subtitle to the embedded reference. It has to finish in a few seconds and the offset has to be real.
+
+- Do not download or scan the media file to reconstruct the embedded subtitle (no cluster harvest, no full SRT/PGS extract). The cue index plus the matcher is the path.
+- If the index has timings and no text, match on those timings. Do not wait on playback to collect cues, and do not fall back to a slow extract.
+- A rejected match is better than a slow match or a guessed offset. Do not loosen confidence just to force a success toast.
+- Keep the change in the matcher or the index reader. Do not add a second sync pipeline.
