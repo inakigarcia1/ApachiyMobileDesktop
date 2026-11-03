@@ -108,7 +108,6 @@ internal fun PlayerScreenRuntime.tryCompleteOpeningOverlay() {
     if (initialLoadCompleted) return
     val dismiss = AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
         playerIsLoading = playbackSnapshot.isLoading,
-        pipelineDone = subtitlePipelineDone,
         playerBound = playerController != null,
     )
     if (dismiss) {

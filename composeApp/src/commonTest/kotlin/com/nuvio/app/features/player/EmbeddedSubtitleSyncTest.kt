@@ -171,34 +171,23 @@ class EmbeddedSubtitleSyncTest {
     }
 
     @Test
-    fun overlayWaitsForTheSubtitleAttempt() {
-        assertFalse(AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = false))
-        assertTrue(AddonSubtitleLoadingGate.shouldBindPlayer(pipelineDone = true))
+    fun overlayDoesNotWaitForSubtitles() {
+        assertTrue(AddonSubtitleLoadingGate.shouldBindPlayer())
         assertFalse(
             AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
                 playerIsLoading = false,
-                pipelineDone = false,
                 playerBound = false,
             ),
         )
         assertFalse(
             AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
                 playerIsLoading = true,
-                pipelineDone = true,
                 playerBound = true,
-            ),
-        )
-        assertFalse(
-            AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
-                playerIsLoading = false,
-                pipelineDone = true,
-                playerBound = false,
             ),
         )
         assertTrue(
             AddonSubtitleLoadingGate.shouldDismissOpeningOverlay(
                 playerIsLoading = false,
-                pipelineDone = true,
                 playerBound = true,
             ),
         )

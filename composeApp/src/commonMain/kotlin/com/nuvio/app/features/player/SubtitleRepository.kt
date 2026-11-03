@@ -41,6 +41,12 @@ object SubtitleRepository {
         _error.value = null
     }
 
+    fun publish(subtitles: List<AddonSubtitle>) {
+        _addonSubtitles.value = subtitles
+        _isLoading.value = false
+        _error.value = null
+    }
+
     suspend fun fetchApachiySubtitles(
         type: String,
         videoId: String,

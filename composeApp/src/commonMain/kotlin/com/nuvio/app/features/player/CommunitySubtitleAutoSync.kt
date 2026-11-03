@@ -1,8 +1,11 @@
 package com.nuvio.app.features.player
 
+import androidx.compose.runtime.snapshotFlow
 import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
+import com.nuvio.app.features.autosync.CommunityAutoSyncAttempt
 import com.nuvio.app.features.autosync.CommunityAutoSyncRetime
+import com.nuvio.app.features.autosync.OPEN_SUBTITLES_FIRST_BUDGET_MS
 import com.nuvio.app.features.autosync.OpenSubtitlesExtraCandidates
 import com.nuvio.app.features.autosync.effectiveAutoSyncEnabled
 import com.nuvio.app.features.autosync.effectiveSyncToleranceMsForCommunity
@@ -11,8 +14,12 @@ import com.nuvio.app.features.autosync.selectedSubtitleWithinToleranceMs
 import com.nuvio.app.features.player.embedded.DialogueTimingIndex
 import com.nuvio.app.features.player.embedded.EmbeddedSubtitleExtractor
 import com.nuvio.app.isIos
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal suspend fun PlayerScreenRuntime.loadDialogueTimingIndex(): DialogueTimingIndex {
     val cached = dialogueTimingIndex
@@ -28,6 +35,130 @@ internal suspend fun PlayerScreenRuntime.loadDialogueTimingIndex(): DialogueTimi
     }
     dialogueTimingIndex = loaded
     return loaded
+}
+
+internal suspend fun PlayerScreenRuntime.runOpenSubtitlesFirst(): Boolean {
+    if (isUserExplicitSubtitleSelection) return true
+    val syncType = contentType?.takeIf { it.isNotBlank() }
+        ?: activeAddonSubtitleType.takeIf { it.isNotBlank() }
+    val syncVideoId = activeVideoId?.takeIf { it.isNotBlank() } ?: return false
+    if (syncType == null) return false
+
+    val candidates = OpenSubtitlesExtraCandidates.load(syncType, syncVideoId)
+    if (candidates.isEmpty()) return false
+
+    val controller = snapshotFlow { playerController }.filterNotNull().first()
+    val source = httpTimingSourceUrl().orEmpty()
+    val headers = sanitizePlaybackHeaders(activeSourceHeaders)
+    val candidateUrls = candidates.map { it.url }
+
+    val appliedUrl = withTimeoutOrNull(OPEN_SUBTITLES_FIRST_BUDGET_MS) {
+        val deferred = CompletableDeferred<String?>()
+        val engineStarted = controller.runOpenSubtitlesFirstAutoSync(
+            sourceUrl = source,
+            sourceHeaders = headers,
+            candidateUrls = candidateUrls,
+        ) { url ->
+            deferred.complete(url)
+        }
+        if (engineStarted) {
+            deferred.await()
+        } else {
+            runOpenSubtitlesFirstCommonPath(
+                controller = controller,
+                headers = headers,
+                candidates = candidates,
+            )
+        }
+    }
+
+    if (isUserExplicitSubtitleSelection) return true
+    if (appliedUrl.isNullOrBlank()) return false
+
+    markOpenSubtitlesFirstApplied(appliedUrl)
+    showAutoSyncNotice("Auto Sync V2 succeeded • OpenSubtitles")
+    return true
+}
+
+private suspend fun PlayerScreenRuntime.runOpenSubtitlesFirstCommonPath(
+    controller: PlayerEngineController,
+    headers: Map<String, String>,
+    candidates: List<com.nuvio.app.features.autosync.AutoSyncSubtitleCandidate>,
+): String? {
+    val index = loadDialogueTimingIndex()
+    if (index.tracks.isEmpty()) return null
+    val extraUrls = candidates.drop(1).map { it.url }
+    val attempt = retimeCommunityAutoSyncAgainstIndex(
+        index = index,
+        subtitleUrl = candidates.first().url,
+        headers = emptyMap(),
+        extraUrls = extraUrls,
+    ) ?: return null
+    if (isUserExplicitSubtitleSelection) return null
+    val rewritten = renderRetimedSrt(attempt.cues, attempt.timeline)
+    return if (controller.replaceExternalSubtitleBody(attempt.subtitleUrl, rewritten)) {
+        attempt.subtitleUrl
+    } else {
+        null
+    }
+}
+
+private fun PlayerScreenRuntime.markOpenSubtitlesFirstApplied(url: String) {
+    appliedAddonSubtitleUrl = url
+    useCustomSubtitles = true
+    selectedSubtitleIndex = -1
+    preferredSubtitleSelectionApplied = true
+    val id = "opensubtitles:${url.hashCode()}"
+    selectedAddonSubtitleId = id
+    playerController?.selectSubtitleTrack(-1)
+    playerController?.setSubtitleDelayMs(0)
+    SubtitleRepository.publish(
+        listOf(
+            AddonSubtitle(
+                id = id,
+                url = url,
+                language = "es",
+                display = "Español • OpenSubtitles",
+                addonName = "OpenSubtitles",
+                isSelected = true,
+            ),
+        ),
+    )
+}
+
+private suspend fun PlayerScreenRuntime.retimeCommunityAutoSyncAgainstIndex(
+    index: DialogueTimingIndex,
+    subtitleUrl: String,
+    headers: Map<String, String>,
+    extraUrls: List<String>,
+): CommunityAutoSyncAttempt? {
+    var currentIndex = index
+    var attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
+        index = currentIndex,
+        subtitleUrl = subtitleUrl,
+        headers = headers,
+        extraSubtitleUrls = extraUrls,
+    )
+    if (attempt == null && CommunityAutoSyncRetime.indexNeedsPgsSemanticFallback(currentIndex, attempt)) {
+        val sourceUrl = httpTimingSourceUrl()
+        if (sourceUrl != null) {
+            val semantic = EmbeddedSubtitleExtractor.loadPgsSemanticDialogueTiming(
+                sourceUrl = sourceUrl,
+                headers = sanitizePlaybackHeaders(activeSourceHeaders),
+            )
+            if (semantic != null && semantic.tracks.isNotEmpty()) {
+                dialogueTimingIndex = semantic
+                currentIndex = semantic
+                attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
+                    index = currentIndex,
+                    subtitleUrl = subtitleUrl,
+                    headers = headers,
+                    extraSubtitleUrls = extraUrls,
+                )
+            }
+        }
+    }
+    return attempt
 }
 
 internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
@@ -79,31 +210,12 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             showAutoSyncNotice("Auto Sync V2 failed: no reliable match")
             return@launch
         }
-        var attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
+        var attempt = retimeCommunityAutoSyncAgainstIndex(
             index = index,
             subtitleUrl = subtitleUrl,
             headers = headers,
-            extraSubtitleUrls = extraUrls,
+            extraUrls = extraUrls,
         )
-        if (attempt == null && CommunityAutoSyncRetime.indexNeedsPgsSemanticFallback(index, attempt)) {
-            val sourceUrl = httpTimingSourceUrl()
-            if (sourceUrl != null) {
-                val semantic = EmbeddedSubtitleExtractor.loadPgsSemanticDialogueTiming(
-                    sourceUrl = sourceUrl,
-                    headers = headers,
-                )
-                if (semantic != null && semantic.tracks.isNotEmpty()) {
-                    dialogueTimingIndex = semantic
-                    index = semantic
-                    attempt = CommunityAutoSyncRetime.retimeAgainstIndex(
-                        index = index,
-                        subtitleUrl = subtitleUrl,
-                        headers = headers,
-                        extraSubtitleUrls = extraUrls,
-                    )
-                }
-            }
-        }
         if (attempt == null) {
             if (index.noSubtitleTracks) {
                 handOffToDesktopAudioSync(subtitleUrl, headers, syncContentType, syncVideoId)

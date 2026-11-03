@@ -64,14 +64,10 @@ data class MediaFileIdentity(
 )
 
 internal object AddonSubtitleLoadingGate {
-    fun shouldBindPlayer(pipelineDone: Boolean): Boolean = pipelineDone
+    fun shouldBindPlayer(): Boolean = true
 
     fun shouldDismissOpeningOverlay(
         playerIsLoading: Boolean,
-        pipelineDone: Boolean,
         playerBound: Boolean,
-    ): Boolean {
-        if (!pipelineDone || !playerBound || playerIsLoading) return false
-        return true
-    }
+    ): Boolean = playerBound && !playerIsLoading
 }

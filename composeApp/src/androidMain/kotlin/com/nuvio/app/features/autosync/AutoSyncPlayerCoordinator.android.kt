@@ -605,6 +605,102 @@ internal class AutoSyncPlayerCoordinator(
         val expectedGeneration: Long,
     )
 
+    fun startOpenSubtitlesFirst(
+        candidateUrls: List<String>,
+        onDone: (String?) -> Unit,
+    ) {
+        cancel()
+        if (candidateUrls.isEmpty()) {
+            onDone(null)
+            return
+        }
+        val candidates = candidateUrls.map { url ->
+            AutoSyncSubtitleCandidate(url = url, language = SPANISH_SYNC_LANGUAGE, name = "OpenSubtitles")
+        }
+        val useLibass = getUseLibass()
+        job = scope.launch {
+            try {
+                var noSubtitleTracks = false
+                val resolved = AutomaticSubtitleSync.findTimelineRetime(
+                    sourceKey = sourceUrl,
+                    sourceHeaders = sourceHeaders,
+                    selectedSubtitleUrl = candidates.first().url,
+                    selectedSubtitleHeaders = emptyMap(),
+                    preferredLanguage = SPANISH_SYNC_LANGUAGE,
+                    alternativeSubtitles = candidates.drop(1),
+                    onNoSubtitleTracks = { noSubtitleTracks = true },
+                )
+                if (resolved == null) {
+                    AutoSyncDebugLog.info {
+                        "openSubtitlesFirst miss noSubtitleTracks=$noSubtitleTracks"
+                    }
+                    onDone(null)
+                    return@launch
+                }
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
+                val chosenUrl = resolved.subtitleUrl
+                val timeline = resolved.timeline
+                val subtitleHeaders = resolved.subtitleHeaders
+                val bodyLoader = resolved.subtitleBody?.let { body ->
+                    suspend { body }
+                } ?: {
+                    AutomaticSubtitleSync.downloadSubtitleBody(
+                        url = chosenUrl,
+                        headers = subtitleHeaders,
+                    )
+                }
+                if (
+                    !sidecar.startSidecarAddonSubtitle(
+                        url = chosenUrl,
+                        headers = subtitleHeaders,
+                        useLibass = useLibass,
+                        rawBodyLoader = bodyLoader,
+                    )
+                ) {
+                    onDone(null)
+                    return@launch
+                }
+                val applied = applyAutoSyncSidecarTimeline(
+                    sidecar = sidecar,
+                    url = chosenUrl,
+                    timeline = timeline,
+                )
+                if (!applied) {
+                    onDone(null)
+                    return@launch
+                }
+                onMimeTypeSelected(PlayerSubtitleUtils.mimeTypeFromUrl(chosenUrl))
+                onSubtitleDelayChanged(0)
+                appliedListener?.invoke(chosenUrl, 0)
+                val originalBody = resolved.subtitleBody
+                val referenceGeneration = sidecar.currentGenerationFor(chosenUrl)
+                if (originalBody != null && referenceGeneration != null) {
+                    retryContext = RetryContext(
+                        subtitleUrl = chosenUrl,
+                        subtitleHeaders = subtitleHeaders,
+                        originalBody = originalBody,
+                        appliedReference = resolved.reference,
+                        rejectedReferenceKeys = emptySet(),
+                        expectedGeneration = referenceGeneration,
+                    )
+                    _retryState.value = AutoSyncRetryUiState(available = true)
+                } else {
+                    invalidateRetryContext()
+                }
+                onDone(chosenUrl)
+            } catch (cancel: CancellationException) {
+                onDone(null)
+                throw cancel
+            } catch (error: Exception) {
+                AutoSyncDebugLog.error(error) { "openSubtitlesFirst failed" }
+                onDone(null)
+            }
+        }
+    }
+
     private fun showAutoSyncNotice(message: String) {
         Log.d(TAG, message)
         if (!ApachiyProductSettings.operatorSettingsVisible) return

@@ -50,6 +50,17 @@ interface PlayerEngineController {
         isStillSelected: () -> Boolean = { true },
     ): Boolean = false
 
+    /**
+     * Android ExoPlayer: match OpenSubtitles candidates before any community subtitle is shown.
+     * Returns false when the engine uses the common retime path instead.
+     */
+    fun runOpenSubtitlesFirstAutoSync(
+        sourceUrl: String,
+        sourceHeaders: Map<String, String>,
+        candidateUrls: List<String>,
+        onDone: (String?) -> Unit,
+    ): Boolean = false
+
     /** Replaces the external subtitle already on screen with [body], without reloading the video. */
     fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean = false
 

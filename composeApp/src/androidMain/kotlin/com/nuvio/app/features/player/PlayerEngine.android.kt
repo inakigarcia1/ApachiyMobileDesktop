@@ -1073,6 +1073,16 @@ private fun ExoPlayerSurface(
                     return true
                 }
 
+                override fun runOpenSubtitlesFirstAutoSync(
+                    sourceUrl: String,
+                    sourceHeaders: Map<String, String>,
+                    candidateUrls: List<String>,
+                    onDone: (String?) -> Unit,
+                ): Boolean {
+                    autoSyncCoordinator.startOpenSubtitlesFirst(candidateUrls, onDone)
+                    return true
+                }
+
                 override fun replaceExternalSubtitleBody(sourceUrl: String, body: String): Boolean {
                     val current = sidecarController.activeSidecarSubtitleKey ?: return false
                     val parsed = parseSidecarTimedCuesRobust(body, sourceUrl)

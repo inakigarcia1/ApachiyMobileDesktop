@@ -2,6 +2,11 @@ package com.nuvio.app.features.player
 
 import com.nuvio.app.core.i18n.localizedNoSubtitleLinesFound
 import com.nuvio.app.core.i18n.localizedSubtitleLinesLoadError
+import com.nuvio.app.core.build.ApachiyProductSettings
+import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
+import com.nuvio.app.features.autosync.StartupSubtitleRoute
+import com.nuvio.app.features.autosync.decideStartupSubtitleRoute
+import com.nuvio.app.features.autosync.effectiveAutoSyncEnabled
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.player.agentqa.AgentQa
 import com.nuvio.app.features.player.embedded.selectPreferredSpanishAddonSubtitle
@@ -9,6 +14,12 @@ import com.nuvio.app.isIos
 import kotlinx.coroutines.launch
 
 internal fun PlayerScreenRuntime.applyAddonSubtitleUri(url: String) {
+    if (
+        selectedAddonSubtitleId?.startsWith("opensubtitles:") == true &&
+        appliedAddonSubtitleUrl == url
+    ) {
+        return
+    }
     val prepared = preparedAddonSubtitlePlaybackUri
     val readyController = playerController
     if (prepared != null && readyController != null) {
@@ -65,14 +76,14 @@ internal fun PlayerScreenRuntime.applyAddonSubtitleUri(url: String) {
     }
 }
 
-internal fun PlayerScreenRuntime.fetchAddonSubtitlesForActiveItem() {
+internal fun PlayerScreenRuntime.fetchAddonSubtitlesForActiveItem(manual: Boolean = false) {
     subtitlePipelineJob?.cancel()
     subtitlePipelineJob = scope.launch {
-        fetchAddonSubtitlesPipeline()
+        fetchAddonSubtitlesPipeline(manual = manual)
     }
 }
 
-internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline() {
+internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline(manual: Boolean = false) {
     val type = activeAddonSubtitleType.takeIf { it.isNotBlank() }
     val videoId = activeVideoId?.takeIf { it.isNotBlank() }
     if (type == null || videoId == null) {
@@ -85,7 +96,6 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline() {
         finishAgentQaPipeline(skipReason = "embedded_spanish")
         return
     }
-    val sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders)
     autoFetchedAddonSubtitlesForKey = addonSubtitleFetchKey
     if (!isIos) {
         val timing = loadDialogueTimingIndex()
@@ -97,6 +107,44 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline() {
         }
     }
 
+    subtitlePipelineDone = true
+    tryCompleteOpeningOverlay()
+
+    if (!manual) {
+        AutoSyncPreferencesRepository.ensureLoaded()
+        val autoSyncEnabled = effectiveAutoSyncEnabled(
+            operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible,
+            storedEnabled = AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value,
+        )
+        val noEmbeddedTextTracks = if (isIos) {
+            true
+        } else {
+            loadDialogueTimingIndex().noSubtitleTracks
+        }
+        val route = decideStartupSubtitleRoute(
+            hasEmbeddedSpanish = false,
+            autoSyncAvailable = !isIos && autoSyncEnabled && !isUserExplicitSubtitleSelection,
+            noEmbeddedTextTracks = noEmbeddedTextTracks,
+        )
+        if (route == StartupSubtitleRoute.OPEN_SUBTITLES_FIRST && runOpenSubtitlesFirst()) {
+            agentQaPipeline = "opensubtitles_synced"
+            AgentQa.event("pipeline", "opensubtitles_synced")
+            publishAgentQaSnapshot()
+            return
+        }
+        if (route == StartupSubtitleRoute.OPEN_SUBTITLES_FIRST) {
+            AgentQa.event("pipeline", "community_fallback:opensubtitles_miss")
+        }
+    }
+
+    fetchCommunityAndApply(type = type, videoId = videoId)
+}
+
+private suspend fun PlayerScreenRuntime.fetchCommunityAndApply(
+    type: String,
+    videoId: String,
+) {
+    val sourceHeaders = sanitizePlaybackHeaders(activeSourceHeaders)
     agentQaPipeline = "fetching"
     AgentQa.event("pipeline", agentQaPipeline)
     val addonSubs = SubtitleRepository.fetchApachiySubtitles(

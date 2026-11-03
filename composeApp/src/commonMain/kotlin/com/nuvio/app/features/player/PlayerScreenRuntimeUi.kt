@@ -164,9 +164,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         }
     }
     val playerSurfaceSourceUrl = if (isP2pPlaybackActive) p2pResolvedSourceUrl else activeSourceUrl
-    val bindPlaybackSurface = AddonSubtitleLoadingGate.shouldBindPlayer(
-        pipelineDone = subtitlePipelineDone,
-    )
+    val bindPlaybackSurface = AddonSubtitleLoadingGate.shouldBindPlayer()
     val initialPositionRequestKey = currentInitialPositionRequestKey()
     val currentPlayerSurfaceSource = playerSurfaceSourceUrl
         ?.takeIf { bindPlaybackSurface }
@@ -1034,7 +1032,7 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             }
             selectAudioTrackFromUser(index)
         }
-        "fetchAddonSubtitles" -> fetchAddonSubtitlesForActiveItem()
+        "fetchAddonSubtitles" -> fetchAddonSubtitlesForActiveItem(manual = true)
         "selectAddonSubtitle" -> {
             val addon = visibleAddonSubtitles.getOrNull(value.toInt()) ?: return true
             playerControlsLog.d {
@@ -1776,7 +1774,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
             persistAddonSubtitlePreference(addon)
             applyAddonSubtitleUri(addon.url)
         },
-        onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem() },
+        onFetchAddonSubtitles = { fetchAddonSubtitlesForActiveItem(manual = true) },
         onSubtitleStyleChanged = PlayerSettingsRepository::setSubtitleStyle,
         onSubtitleDelayChanged = { delayMs -> setSubtitleDelay(delayMs) },
         onSubtitleDelayReset = { setSubtitleDelay(0) },
