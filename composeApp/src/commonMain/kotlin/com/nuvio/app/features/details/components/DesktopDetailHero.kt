@@ -74,6 +74,8 @@ import nuvio.composeapp.generated.resources.hero_add_to_library
 import nuvio.composeapp.generated.resources.hero_mark_unwatched
 import nuvio.composeapp.generated.resources.hero_mark_watched
 import nuvio.composeapp.generated.resources.hero_remove_from_library
+import nuvio.composeapp.generated.resources.details_season_count
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -395,9 +397,12 @@ private fun DesktopHeroMetaRow(meta: MetaDetails) {
     val colorScheme = MaterialTheme.colorScheme
     val space = NuvioTokens.Space
     val opacity = NuvioTokens.Opacity
+    val seasonCountLabel = desktopSeasonCount(meta)?.let { count ->
+        pluralStringResource(Res.plurals.details_season_count, count, count)
+    }
     val metaItems = buildList {
         desktopYearLabel(meta)?.let(::add)
-        desktopSeasonCountLabel(meta)?.let(::add)
+        seasonCountLabel?.let(::add)
         formatRuntimeForDisplay(meta.runtime)?.let(::add)
     }
     Row(

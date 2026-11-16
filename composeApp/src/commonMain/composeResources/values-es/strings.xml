@@ -1235,6 +1235,10 @@
     <string name="detail_more_like_this_powered_by_tmdb">Desarrollado por TMDB</string>
     <string name="detail_more_like_this_powered_by_trakt">Desarrollado por Trakt</string>
     <string name="details_seasons">Temporadas</string>
+    <plurals name="details_season_count">
+        <item quantity="one">%d temporada</item>
+        <item quantity="other">%d temporadas</item>
+    </plurals>
     <string name="details_series_missing_numbers">Este addon devolvió videos para la serie, pero ninguno incluía números de temporada o episodio.</string>
     <string name="details_series_no_metadata">Este addon no proporcionó metadatos de episodios para esta serie.</string>
     <string name="details_series_unpublished">Este addon aún no ha publicado episodios.</string>

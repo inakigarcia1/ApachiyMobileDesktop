@@ -2358,6 +2358,10 @@
     <string name="entity_browse_title_count_other">%d titles</string>
     <string name="player_external_loading_subtitles">Loading subtitles from addons...</string>
     <string name="player_external_downloading_subtitles">Downloading subtitles...</string>
+    <plurals name="details_season_count">
+        <item quantity="one">%d Season</item>
+        <item quantity="other">%d Seasons</item>
+    </plurals>
     <plurals name="entity_browse_title_count">
         <item quantity="one">%d title</item>
         <item quantity="other">%d titles</item>
