@@ -139,6 +139,8 @@ internal class NativePlayerController(
     private var pendingSubtitleDelayMs: Int? = null
     private var pendingSubtitleStyle: SubtitleStyleState? = null
     private var pendingExternalSubtitleUrl: String? = null
+    @Volatile
+    private var externalSubtitleDeferred = false
     private var pendingUseLibass: Boolean = false
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
     private var lastSentControlsPresentationKey: NativeControlsPresentationKey? = null
@@ -483,8 +485,15 @@ internal class NativePlayerController(
         ) {
             return
         }
+        val previousNotificationToken = lastSentControlsPresentationKey?.notificationToken
         lastSentControlsStructureKey = structureKey
         lastSentControlsPresentationKey = presentationKey
+        if (previousNotificationToken != stateWithVolume.notificationToken) {
+            com.nuvio.app.features.autosync.AutoSyncTrace.log(
+                "toast sent to webview token=${stateWithVolume.notificationToken} " +
+                    "overlay=${stateWithVolume.showOpeningOverlay} msg=${stateWithVolume.notificationMessage}",
+            )
+        }
         log.d {
             "updateControls handle=$current title=${stateWithVolume.title.take(40)} " +
                 "pos=${stateWithVolume.positionMs} duration=${stateWithVolume.durationMs} " +
@@ -1033,6 +1042,12 @@ internal class NativePlayerController(
     }
 
     fun notePlaybackSnapshot(snapshot: PlayerPlaybackSnapshot) {
+        if (externalSubtitleDeferred && pendingExternalSubtitleUrl != null) {
+            handle.takeIf { it != 0L }?.let { current ->
+                applyPendingExternalSubtitle(current)
+                if (!externalSubtitleDeferred) applyPendingSubtitleSettings()
+            }
+        }
         val listener = onAudioTrackUnplayable ?: return
         val now = System.currentTimeMillis()
         if (snapshot.isPlaying) audioStallReadySeen = true
@@ -1139,8 +1154,7 @@ internal class NativePlayerController(
         val file = File(System.getProperty("java.io.tmpdir"), "apachiy-autosync-${sourceUrl.hashCode()}.srt")
         file.writeText(body)
         pendingExternalSubtitleUrl = file.absolutePath
-        NativePlayerBridge.clearExternalSubtitles(current)
-        NativePlayerBridge.addSubtitleUrl(current, file.absolutePath)
+        applyPendingExternalSubtitle(current)
         NativePlayerBridge.setSubtitleDelayMs(current, 0)
         pendingSubtitleDelayMs = 0
         applyPendingSubtitleSettings()
@@ -1165,6 +1179,15 @@ internal class NativePlayerController(
 
     private fun applyPendingExternalSubtitle(current: Long) {
         val url = pendingExternalSubtitleUrl ?: return
+        // mpv rejects sub-add until the file is loaded and the bridge drops that error, leaving the
+        // option "selected" with nothing on screen. Duration > 0 stands in for mpv's file-loaded.
+        if (NativePlayerBridge.durationMs(current) <= 0L) {
+            externalSubtitleDeferred = true
+            log.d { "subtitle deferred until media loaded ${url.toPlaybackLogKey()}" }
+            return
+        }
+        externalSubtitleDeferred = false
+        log.d { "subtitle external add ${url.toPlaybackLogKey()} handle=$current" }
         NativePlayerBridge.clearExternalSubtitles(current)
         NativePlayerBridge.addSubtitleUrl(current, url)
     }

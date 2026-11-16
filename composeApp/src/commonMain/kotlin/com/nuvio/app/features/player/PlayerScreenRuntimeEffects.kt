@@ -319,6 +319,8 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         val selectedId = selectedAddonSubtitleId ?: return@LaunchedEffect
         val subtitle = addonSubtitles.firstOrNull { it.id == selectedId || it.url == selectedId }
             ?: return@LaunchedEffect
+        // User-driven selection already applied this url synchronously; don't apply (and AutoSync) twice.
+        if (appliedAddonSubtitleUrl == subtitle.url || addonSubtitleApplyInFlightUrl == subtitle.url) return@LaunchedEffect
         applyAddonSubtitleUri(subtitle.url)
     }
 
