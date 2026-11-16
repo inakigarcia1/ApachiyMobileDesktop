@@ -278,6 +278,9 @@ internal class PlayerScreenRuntime(
     var communityAutoSyncJob: Job? = null
     var dialogueTimingIndex: DialogueTimingIndex? = null
     var appliedAddonSubtitleUrl by mutableStateOf<String?>(null)
+
+    /** AutoSync output per subtitle URL for this source, served again whenever that subtitle is applied. */
+    val syncedSubtitleBodies = mutableMapOf<String, String>()
     var addonSubtitleApplyInFlightUrl by mutableStateOf<String?>(null)
     var preparedAddonSubtitlePlaybackUri: String? = null
     var trackPreferenceRestoreApplied by mutableStateOf(false)

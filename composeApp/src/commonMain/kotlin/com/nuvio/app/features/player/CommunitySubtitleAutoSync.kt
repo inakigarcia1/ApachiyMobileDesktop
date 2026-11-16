@@ -109,6 +109,7 @@ private suspend fun PlayerScreenRuntime.runOpenSubtitlesFirstCommonPath(
     // Turn off the embedded track before adding the synced file: on libmpv "off" is sid=no,
     // so doing it afterwards hides the file we just added.
     controller.selectSubtitleTrack(-1)
+    syncedSubtitleBodies[attempt.subtitleUrl] = rewritten
     val replaced = controller.replaceExternalSubtitleBody(attempt.subtitleUrl, rewritten)
     return if (replaced) {
         attempt.subtitleUrl
@@ -265,6 +266,7 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             return@launch
         }
         val rewritten = renderRetimedSrt(attempt.cues, attempt.timeline)
+        syncedSubtitleBodies[attempt.subtitleUrl] = rewritten
         val applied = playerController?.replaceExternalSubtitleBody(attempt.subtitleUrl, rewritten) == true
         if (!applied) {
             showAutoSyncNotice("Auto Sync V2 failed: could not apply sync")

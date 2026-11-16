@@ -100,6 +100,8 @@ internal fun PlayerScreenRuntime.resetOpeningOverlayForNewSource() {
     openingOverlayStartMark = TimeSource.Monotonic.markNow()
     appliedAddonSubtitleUrl = null
     addonSubtitleApplyInFlightUrl = null
+    // Desktop keeps a queued external subtitle across sources; drop the previous episode's.
+    if (isDesktop) playerController?.clearExternalSubtitle()
     preparedAddonSubtitlePlaybackUri = null
     resetAgentQaPipeline()
 }

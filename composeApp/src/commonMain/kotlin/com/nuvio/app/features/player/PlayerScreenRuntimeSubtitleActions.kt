@@ -14,6 +14,17 @@ import com.nuvio.app.isIos
 import kotlinx.coroutines.launch
 
 internal fun PlayerScreenRuntime.applyAddonSubtitleUri(url: String) {
+    val synced = syncedSubtitleBodies[url]
+    val syncedController = playerController
+    if (synced != null && syncedController != null) {
+        // Off before adding: on libmpv "off" is sid=no and would hide a file added before it.
+        syncedController.selectSubtitleTrack(-1)
+        if (syncedController.replaceExternalSubtitleBody(url, synced)) {
+            appliedAddonSubtitleUrl = url
+            syncedController.setSubtitleDelayMs(0)
+            return
+        }
+    }
     if (
         selectedAddonSubtitleId?.startsWith("opensubtitles:") == true &&
         appliedAddonSubtitleUrl == url
