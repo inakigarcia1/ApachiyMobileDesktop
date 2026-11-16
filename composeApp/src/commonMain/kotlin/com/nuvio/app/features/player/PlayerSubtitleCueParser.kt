@@ -5,6 +5,9 @@ import kotlin.math.max
 object PlayerSubtitleCueParser {
     private val timestampRegex = Regex("""(?:(\d+):)?(\d{1,2}):(\d{2})([.,](\d+))?""")
 
+    /** ASS override blocks such as `{\an8}` that SRT/VTT files from community subs carry. */
+    val assOverrideTags = Regex("""\{\\[^}]*\}""")
+
     fun parse(text: String, sourceUrl: String? = null): List<SubtitleSyncCue> {
         val cleanedText = cleanText(text)
         return when (detectSubtitleFormat(sourceUrl, cleanedText)) {
@@ -316,6 +319,7 @@ object PlayerSubtitleCueParser {
 
     private fun normalizeCueText(text: String): String {
         return text
+            .replace(assOverrideTags, "")
             .replace(Regex("""<(?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d+)?>"""), "")
             .replace(Regex("""</?[a-zA-Z0-9._-]+(?: [^>]*)?>"""), "")
             .replace("&nbsp;", " ")

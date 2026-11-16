@@ -70,4 +70,11 @@ class PlayerSubtitleUtilsTest {
         assertEquals(1, cues.size)
         assertEquals("Valid cue", cues[0].text)
     }
+
+    @Test
+    fun testAssOverrideTagsStripped() {
+        val srtText = "1\n00:00:01,000 --> 00:00:02,000\n{\\an8}Arriba {\\i1}hola{\\i0}\n"
+        val cues = PlayerSubtitleCueParser.parseFromText(srtText, "test.srt")
+        assertEquals("Arriba hola", cues.single().text)
+    }
 }

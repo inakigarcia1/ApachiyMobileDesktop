@@ -69,6 +69,14 @@ internal actual suspend fun prepareAddonSubtitlePlaybackUri(
         .digest(cacheKey.toByteArray())
         .joinToString("") { byte -> "%02x".format(byte) }
     val cacheFile = cacheDir.resolve("$cacheName.$extension")
-    cacheFile.writeBytes(result.third)
+    // libmpv draws `{\an8}` literally in some SRT/VTT files. Latin-1 maps bytes 1:1, so any encoding survives.
+    val bytes = if (extension == "srt" || extension == "vtt") {
+        result.third.toString(Charsets.ISO_8859_1)
+            .replace(PlayerSubtitleCueParser.assOverrideTags, "")
+            .toByteArray(Charsets.ISO_8859_1)
+    } else {
+        result.third
+    }
+    cacheFile.writeBytes(bytes)
     cacheFile.toUri().toString()
 }
