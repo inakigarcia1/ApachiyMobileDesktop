@@ -101,6 +101,7 @@ internal object AutoSyncSelectedRun {
                 "matcher: ref ${AutoSyncTrace.describe(track)} -> ${result?.let(AutoSyncTrace::describe) ?: "null"}",
             )
             if (result == null || !result.confident) continue
+            if (track.codec != EmbeddedTextCodec.Pgs && !landsOnReference(track, result)) continue
             val current = best
             if (current == null || result.targetCoverage > current.targetCoverage) {
                 best = result
@@ -109,6 +110,29 @@ internal object AutoSyncSelectedRun {
         }
         return best
     }
+
+    /**
+     * Final check on the retimed output: its line starts must land on the reference in every sixth
+     * of the episode. Catches a constant delay forced onto a file whose offset steps at act breaks
+     * (worst window 0.05-0.24) and a file cut for another edit (mean ~0.72); correct retimes measured
+     * worst >= 0.72, mean >= 0.80 on The Mentalist S2E10-12. Text references only: PGS starts are
+     * display events, not line starts.
+     */
+    private fun landsOnReference(track: EmbeddedTextTrack, result: AutoSyncTimelineRetimeResult): Boolean {
+        val rates = AutoSyncOnsetAgreement.windowHitRates(
+            referenceStartsMs = track.cues.map { it.startMs },
+            retimedStartsMs = result.cues.map { it.startTimeMs },
+        )
+        if (rates.isEmpty()) return true
+        val ok = rates.min() >= VERIFY_MIN_WINDOW_HIT_RATE && rates.average() >= VERIFY_MEAN_HIT_RATE
+        AutoSyncTrace.log(
+            "matcher: verify ${if (ok) "pass" else "FAIL"} windows=${rates.map { kotlin.math.round(it * 100).toInt() }}",
+        )
+        return ok
+    }
+
+    private const val VERIFY_MIN_WINDOW_HIT_RATE = 0.60
+    private const val VERIFY_MEAN_HIT_RATE = 0.75
 
     /** Name-based half of Android's isSdhReferenceTrack; the index carries no role flags. */
     private fun isSdh(track: EmbeddedTextTrack): Boolean {
