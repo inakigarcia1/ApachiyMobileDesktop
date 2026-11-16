@@ -141,6 +141,7 @@ internal class NativePlayerController(
     private var pendingExternalSubtitleUrl: String? = null
     @Volatile
     private var externalSubtitleDeferred = false
+    private var lastAttachedSourceUrl: String? = null
     private var pendingUseLibass: Boolean = false
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
     private var lastSentControlsPresentationKey: NativeControlsPresentationKey? = null
@@ -190,6 +191,13 @@ internal class NativePlayerController(
             terminalFailure?.let { message -> SwingUtilities.invokeLater { pending.onError(message) } }
             return
         }
+        if (sourceUrl != lastAttachedSourceUrl) {
+            // The previous episode's (possibly retimed) subtitle must not be loaded into this one.
+            if (pendingExternalSubtitleUrl != null) log.d { "subtitle pending dropped for new source" }
+            pendingExternalSubtitleUrl = null
+            externalSubtitleDeferred = false
+        }
+        lastAttachedSourceUrl = sourceUrl
         log.d {
             "attach requested source=${sourceUrl.toPlaybackLogKey()} headers=${sourceHeaders.size} " +
                 "playWhenReady=$playWhenReady initialPositionMs=$initialPositionMs decoderPriority=$decoderPriority"
