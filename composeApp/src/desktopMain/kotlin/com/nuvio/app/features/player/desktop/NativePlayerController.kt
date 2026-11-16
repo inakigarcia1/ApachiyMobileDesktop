@@ -493,15 +493,8 @@ internal class NativePlayerController(
         ) {
             return
         }
-        val previousNotificationToken = lastSentControlsPresentationKey?.notificationToken
         lastSentControlsStructureKey = structureKey
         lastSentControlsPresentationKey = presentationKey
-        if (previousNotificationToken != stateWithVolume.notificationToken) {
-            com.nuvio.app.features.autosync.AutoSyncTrace.log(
-                "toast sent to webview token=${stateWithVolume.notificationToken} " +
-                    "overlay=${stateWithVolume.showOpeningOverlay} msg=${stateWithVolume.notificationMessage}",
-            )
-        }
         log.d {
             "updateControls handle=$current title=${stateWithVolume.title.take(40)} " +
                 "pos=${stateWithVolume.positionMs} duration=${stateWithVolume.durationMs} " +

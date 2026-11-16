@@ -41,9 +41,6 @@ internal object CommunityAutoSyncRetime {
         }.filterNotNull()
         // Stable sort: equal scores keep the selected subtitle first.
         val ranked = loaded.sortedByDescending { it.agreement }
-        AutoSyncTrace.log(
-            "retime: ranked " + ranked.joinToString { "${AutoSyncTrace.shortUrl(it.url)}=${kotlin.math.round(it.agreement * 100).toInt()}%" },
-        )
         for (candidate in ranked) {
             val timeline = AutoSyncSelectedRun.retime(index.tracks, candidate.cues) ?: continue
             return CommunityAutoSyncAttempt(subtitleUrl = candidate.url, cues = candidate.cues, timeline = timeline)
@@ -58,14 +55,9 @@ internal object CommunityAutoSyncRetime {
     ): Loaded? {
         val body = runCatching {
             httpGetTextWithHeaders(url = subtitleUrl, headers = headers)
-        }.onFailure {
-            AutoSyncTrace.log("retime: download failed ${AutoSyncTrace.shortUrl(subtitleUrl)} err=${it.message}")
         }.getOrNull() ?: return null
         val cues = PlayerSubtitleCueParser.parse(body, subtitleUrl)
         val agreement = AutoSyncOnsetAgreement.score(referenceStarts, cues.map { it.startTimeMs })
-        AutoSyncTrace.log(
-            "retime: ${AutoSyncTrace.shortUrl(subtitleUrl)} bytes=${body.length} cues=${cues.size} agreement=$agreement",
-        )
         return Loaded(subtitleUrl, cues, agreement)
     }
 

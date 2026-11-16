@@ -4,7 +4,6 @@ import com.nuvio.app.core.i18n.localizedNoSubtitleLinesFound
 import com.nuvio.app.core.i18n.localizedSubtitleLinesLoadError
 import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
-import com.nuvio.app.features.autosync.AutoSyncTrace
 import com.nuvio.app.features.autosync.StartupSubtitleRoute
 import com.nuvio.app.features.autosync.decideStartupSubtitleRoute
 import com.nuvio.app.features.autosync.effectiveAutoSyncEnabled
@@ -87,16 +86,11 @@ internal fun PlayerScreenRuntime.fetchAddonSubtitlesForActiveItem(manual: Boolea
 internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline(manual: Boolean = false) {
     val type = activeAddonSubtitleType.takeIf { it.isNotBlank() }
     val videoId = activeVideoId?.takeIf { it.isNotBlank() }
-    AutoSyncTrace.log(
-        "pipeline: start manual=$manual type=$type video=$videoId playerTracks=" +
-            subtitleTracks.joinToString { "${it.language}/${it.label}" },
-    )
     if (type == null || videoId == null) {
         finishAgentQaPipeline(skipReason = "missing_ids")
         return
     }
     if (SubtitleLanguageMatching.hasEmbeddedSpanishSubtitleTrack(subtitleTracks)) {
-        AutoSyncTrace.log("pipeline: player reports embedded Spanish track, no community subtitle")
         SubtitleRepository.clear()
         agentQaHasEmbeddedSpanish = true
         finishAgentQaPipeline(skipReason = "embedded_spanish")
@@ -106,7 +100,6 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline(manual: Boo
     if (!isIos) {
         val timing = loadDialogueTimingIndex()
         if (timing.hasEmbeddedSpanish) {
-            AutoSyncTrace.log("pipeline: index reports embedded Spanish track, no community subtitle")
             SubtitleRepository.clear()
             agentQaHasEmbeddedSpanish = true
             finishAgentQaPipeline(skipReason = "embedded_spanish")
@@ -132,10 +125,6 @@ internal suspend fun PlayerScreenRuntime.fetchAddonSubtitlesPipeline(manual: Boo
             hasEmbeddedSpanish = false,
             autoSyncAvailable = !isIos && autoSyncEnabled && !isUserExplicitSubtitleSelection,
             noEmbeddedTextTracks = noEmbeddedTextTracks,
-        )
-        AutoSyncTrace.log(
-            "pipeline: route=$route autoSyncEnabled=$autoSyncEnabled explicit=$isUserExplicitSubtitleSelection " +
-                "noEmbeddedText=$noEmbeddedTextTracks",
         )
         if (route == StartupSubtitleRoute.OPEN_SUBTITLES_FIRST && runOpenSubtitlesFirst()) {
             agentQaPipeline = "opensubtitles_synced"

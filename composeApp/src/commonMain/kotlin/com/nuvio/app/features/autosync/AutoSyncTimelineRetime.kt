@@ -445,15 +445,6 @@ internal object AutoSyncTimelineRetimer {
                 } &&
                 simpleRatio >= DISCOVERED_MIN_SIMPLE_GROUP_RATIO
 
-        if (!confirmed) {
-            AutoSyncTrace.log(
-                "gate: rejected offset=${candidateInterceptMs.toLong()} dpConfident=${result.confident} " +
-                    "actScore=${candidateActivityScore} (need>=$requiredActivityScore) " +
-                    "actMargin=${candidateActivityMargin} (need>=$requiredActivityMargin, delayOnly=$delayOnly relax=$allowAmbiguousDelayOnlyMargin) " +
-                    "covSeg=$coverageSegments/$requiredCoverageSegments tCov=${result.targetCoverage}/$minTargetCoverage " +
-                    "cost=${result.averageGroupCost}/$maxAverageGroupCost skipRun=${result.longestTargetSkipRun} simple=$simpleRatio/$DISCOVERED_MIN_SIMPLE_GROUP_RATIO",
-            )
-        }
         return result.copy(
             confident = confirmed,
             alignmentSource = if (delayOnly) "delay-only-validated" else "activity-correlation",
@@ -1161,7 +1152,6 @@ internal object AutoSyncTimelineRetimer {
             }
             .maxByOrNull { it.score }
         val margin = coarseBest.score - (secondDistinct?.score ?: 0.0)
-        AutoSyncTrace.log("activity: best=$coarseBest second=$secondDistinct")
 
         val referenceFine = referenceActivity.fine
         val targetFine = if (coarseBest.scale == 1.0) {

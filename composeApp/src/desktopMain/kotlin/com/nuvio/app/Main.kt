@@ -66,9 +66,6 @@ fun main(args: Array<String>) {
     // on the very first Compose frame (matching Android's SharedPreferences behavior).
     ProfileRepository.loadCachedProfiles()
     AutoSyncPreferencesDesktop.initialize()
-    if (com.nuvio.app.features.updater.AppUpdaterPlatform.isDebugBuild) {
-        com.nuvio.app.features.autosync.AutoSyncTraceFile.install()
-    }
     AppIconRepository.ensureLoaded()
     DiscordPresenceManager.start()
 

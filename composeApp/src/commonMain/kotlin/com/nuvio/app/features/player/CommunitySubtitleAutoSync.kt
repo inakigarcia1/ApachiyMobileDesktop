@@ -3,7 +3,6 @@ package com.nuvio.app.features.player
 import androidx.compose.runtime.snapshotFlow
 import com.nuvio.app.core.build.ApachiyProductSettings
 import com.nuvio.app.features.autosync.AutoSyncPreferencesRepository
-import com.nuvio.app.features.autosync.AutoSyncTrace
 import com.nuvio.app.features.autosync.CommunityAutoSyncAttempt
 import com.nuvio.app.features.autosync.CommunityAutoSyncRetime
 import com.nuvio.app.features.autosync.OPEN_SUBTITLES_FIRST_BUDGET_MS
@@ -26,11 +25,6 @@ internal suspend fun PlayerScreenRuntime.loadDialogueTimingIndex(): DialogueTimi
     val cached = dialogueTimingIndex
     if (cached != null) return cached
     val source = httpTimingSourceUrl()
-    AutoSyncTrace.log(
-        "index: loading source=${AutoSyncTrace.shortUrl(source)} active=${AutoSyncTrace.shortUrl(activeSourceUrl)} " +
-            "p2p=${AutoSyncTrace.shortUrl(p2pResolvedSourceUrl)}",
-    )
-    val started = kotlin.time.TimeSource.Monotonic.markNow()
     val loaded = if (source == null) {
         DialogueTimingIndex()
     } else {
@@ -39,13 +33,11 @@ internal suspend fun PlayerScreenRuntime.loadDialogueTimingIndex(): DialogueTimi
             headers = sanitizePlaybackHeaders(activeSourceHeaders),
         )
     }
-    AutoSyncTrace.log("index: loaded in ${started.elapsedNow()} ${AutoSyncTrace.describe(loaded)}")
     dialogueTimingIndex = loaded
     return loaded
 }
 
 internal suspend fun PlayerScreenRuntime.runOpenSubtitlesFirst(): Boolean {
-    AutoSyncTrace.log("osFirst: start explicit=$isUserExplicitSubtitleSelection type=$contentType video=$activeVideoId")
     if (isUserExplicitSubtitleSelection) return true
     val syncType = contentType?.takeIf { it.isNotBlank() }
         ?: activeAddonSubtitleType.takeIf { it.isNotBlank() }
@@ -53,7 +45,6 @@ internal suspend fun PlayerScreenRuntime.runOpenSubtitlesFirst(): Boolean {
     if (syncType == null) return false
 
     val candidates = OpenSubtitlesExtraCandidates.load(syncType, syncVideoId)
-    AutoSyncTrace.log("osFirst: candidates=${candidates.size} ${candidates.map { AutoSyncTrace.shortUrl(it.url) }}")
     if (candidates.isEmpty()) {
         showAutoSyncNotice("Auto Sync: OpenSubtitles had no candidates, using community")
         return false
@@ -75,7 +66,6 @@ internal suspend fun PlayerScreenRuntime.runOpenSubtitlesFirst(): Boolean {
             deferred.complete(url)
         }
         engineHandled = engineStarted
-        AutoSyncTrace.log("osFirst: engineStarted=$engineStarted")
         if (engineStarted) {
             deferred.await()
         } else {
@@ -87,7 +77,6 @@ internal suspend fun PlayerScreenRuntime.runOpenSubtitlesFirst(): Boolean {
         }
     }
 
-    AutoSyncTrace.log("osFirst: applied=${AutoSyncTrace.shortUrl(appliedUrl)} (none = miss or ${OPEN_SUBTITLES_FIRST_BUDGET_MS}ms budget hit)")
     if (isUserExplicitSubtitleSelection) return true
     if (appliedUrl.isNullOrBlank()) {
         showAutoSyncNotice("Auto Sync: OpenSubtitles no match, trying community")
@@ -106,7 +95,6 @@ private suspend fun PlayerScreenRuntime.runOpenSubtitlesFirstCommonPath(
 ): String? {
     val index = loadDialogueTimingIndex()
     if (index.tracks.isEmpty()) {
-        AutoSyncTrace.log("osFirst: no reference tracks in index")
         return null
     }
     val extraUrls = candidates.drop(1).map { it.url }
@@ -122,7 +110,6 @@ private suspend fun PlayerScreenRuntime.runOpenSubtitlesFirstCommonPath(
     // so doing it afterwards hides the file we just added.
     controller.selectSubtitleTrack(-1)
     val replaced = controller.replaceExternalSubtitleBody(attempt.subtitleUrl, rewritten)
-    AutoSyncTrace.log("osFirst: replaceBody=$replaced ${AutoSyncTrace.describe(attempt.timeline)}")
     return if (replaced) {
         attempt.subtitleUrl
     } else {
@@ -197,10 +184,6 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
         operatorSettingsVisible = ApachiyProductSettings.operatorSettingsVisible,
         storedEnabled = AutoSyncPreferencesRepository.preferredSubtitleAutoSyncOnStart.value,
     )
-    AutoSyncTrace.log(
-        "community: launch sub=${AutoSyncTrace.shortUrl(subtitleUrl)} enabled=$enabled " +
-            "cachedIndex=${dialogueTimingIndex?.let(AutoSyncTrace::describe)}",
-    )
     if (!enabled) {
         showAutoSyncNotice("Auto Sync skipped: disabled in settings")
         return
@@ -221,7 +204,6 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             isStillSelected = { appliedAddonSubtitleUrl == subtitleUrl && useCustomSubtitles },
         ) == true
     ) {
-        AutoSyncTrace.log("community: engine-specific runSelectedAutoSync took over")
         return
     }
     val syncContentType = this.contentType?.takeIf { it.isNotBlank() }
@@ -242,13 +224,11 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             return@launch
         }
         if (index.tracks.isEmpty() && index.noSubtitleTracks) {
-            AutoSyncTrace.log("community: no embedded subtitle tracks -> desktop audio sync")
             extrasDeferred.cancel()
             handOffToDesktopAudioSync(subtitleUrl, headers, syncContentType, syncVideoId)
             return@launch
         }
         val extraUrls = extrasDeferred.await()
-        AutoSyncTrace.log("community: extras=${extraUrls.size}")
         if (index.tracks.isEmpty()) {
             showAutoSyncNotice("Auto Sync V2 failed: embedded reference index empty")
             return@launch
@@ -269,12 +249,7 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
         }
         // OpenSubtitles replaces the addon file. That URL differs on purpose.
         // Bail only when the user picked another subtitle while this run was in flight.
-        AutoSyncTrace.log(
-            "community: attempt sub=${AutoSyncTrace.shortUrl(attempt.subtitleUrl)} kept=${attempt.subtitleUrl == subtitleUrl} " +
-                AutoSyncTrace.describe(attempt.timeline),
-        )
         if (appliedAddonSubtitleUrl != null && appliedAddonSubtitleUrl != subtitleUrl) {
-            AutoSyncTrace.log("community: user switched subtitle, dropping result")
             return@launch
         }
         val withinToleranceMs = selectedSubtitleWithinToleranceMs(
@@ -282,7 +257,6 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
             result = attempt.timeline,
             selectedSubtitleKept = attempt.subtitleUrl == subtitleUrl,
         )
-        AutoSyncTrace.log("community: withinToleranceMs=$withinToleranceMs")
         if (withinToleranceMs != null) {
             playerController?.setSubtitleDelayMs(0)
             showAutoSyncNotice(
@@ -292,7 +266,6 @@ internal fun PlayerScreenRuntime.launchCommunityAutoSync(subtitleUrl: String) {
         }
         val rewritten = renderRetimedSrt(attempt.cues, attempt.timeline)
         val applied = playerController?.replaceExternalSubtitleBody(attempt.subtitleUrl, rewritten) == true
-        AutoSyncTrace.log("community: replaceBody=$applied srtBytes=${rewritten.length}")
         if (!applied) {
             showAutoSyncNotice("Auto Sync V2 failed: could not apply sync")
             return@launch
@@ -334,7 +307,6 @@ private suspend fun PlayerScreenRuntime.handOffToDesktopAudioSync(
 }
 
 internal fun PlayerScreenRuntime.showAutoSyncNotice(message: String) {
-    AutoSyncTrace.log("toast: $message")
     if (!ApachiyProductSettings.operatorSettingsVisible) return
     // Audio sync posts this from a background dispatcher. Compose only republishes
     // the player toast when the write happens on the UI scope.
