@@ -10,7 +10,10 @@ internal object AutoSyncSelectedRun {
         references: List<EmbeddedTextTrack>,
         target: List<SubtitleSyncCue>,
     ): AutoSyncTimelineRetimeResult? {
-        if (target.size < 4) return null
+        if (target.size < 4) {
+            AutoSyncTrace.log("matcher: target too small cues=${target.size}")
+            return null
+        }
         val usable = if (references.any { it.codec != EmbeddedTextCodec.Pgs }) {
             references.filter { it.codec != EmbeddedTextCodec.Pgs }
         } else {
@@ -22,7 +25,25 @@ internal object AutoSyncSelectedRun {
         val forced = usable.filter { track ->
             !hasEmbeddedSpanishTextTrack(listOf(track)) && isFullDialogue(track) && track.forced
         }
-        return firstConfident(primary, target) ?: firstConfident(forced, target)
+        AutoSyncTrace.log(
+            "matcher: target cues=${target.size} firstMs=${target.take(3).map { it.startTimeMs }} " +
+                "refs=${references.size} usable=${usable.size} primary=${primary.size} forced=${forced.size}",
+        )
+        usable.filter { it !in primary && it !in forced }.forEach {
+            AutoSyncTrace.log("matcher: skipped ref (spanish/not full dialogue) ${AutoSyncTrace.describe(it)}")
+        }
+        AutoSyncTrace.log("dump target: " + target.joinToString(",") { "${it.startTimeMs}-${it.endTimeMs}" })
+        usable.forEach { track ->
+            AutoSyncTrace.log("dump ref #${track.trackNumber}: " + track.cues.joinToString(",") { "${it.startMs}-${it.endMs}" })
+        }
+        val chosen = firstConfident(primary, target) ?: firstConfident(forced, target)
+        chosen?.let { result ->
+            AutoSyncTrace.log(
+                "dump retimed: " + result.cues.joinToString(",") { "${it.originalStartTimeMs}>${it.startTimeMs}" },
+            )
+        }
+        AutoSyncTrace.log("matcher: result=${chosen?.let(AutoSyncTrace::describe) ?: "REJECTED"}")
+        return chosen
     }
 
     private fun firstConfident(
@@ -30,23 +51,56 @@ internal object AutoSyncSelectedRun {
         target: List<SubtitleSyncCue>,
     ): AutoSyncTimelineRetimeResult? {
         var best: AutoSyncTimelineRetimeResult? = null
+        val targetActivity = AutoSyncTimelineRetimer.prepareUnitActivity(target)
         for (track in tracks) {
             val estimated = if (track.estimatedCueEnds) {
                 track.cues.map { it.startMs }.toSet()
             } else {
                 emptySet()
             }
+            val reference = track.cues.map { cue -> SubtitleSyncCue(cue.startMs, cue.endMs, cue.text) }
+            // Same delay-only preflight Android runs before affine discovery (AutoSyncDelayPreflight):
+            // without it, a 1.001 FPS-ratio peak hides a valid constant offset behind a thin margin.
+            val referenceActivity = AutoSyncTimelineRetimer.prepareUnitActivity(reference)
+            val relaxDelayMargin = isSdh(track) || reference.size.toLong() * 2L >= target.size.toLong() * 3L
+            val evidence = if (referenceActivity != null && targetActivity != null) {
+                AutoSyncTimelineRetimer.prepareDelayOnlySearchEvidence(referenceActivity, targetActivity)
+            } else {
+                null
+            }
+            val delayHint = if (referenceActivity != null && targetActivity != null && evidence != null) {
+                AutoSyncTimelineRetimer.findDelayOnlyAlignmentPrepared(
+                    referenceActivity = referenceActivity,
+                    targetActivity = targetActivity,
+                    targetSize = target.size,
+                    allowAmbiguousMargin = relaxDelayMargin,
+                    precomputedEvidence = evidence,
+                )
+            } else {
+                null
+            }
+            AutoSyncTrace.log(
+                "matcher: preflight delay=${delayHint?.offsetMs?.toLong()} score=${delayHint?.score} " +
+                    "margin=${delayHint?.margin} segments=${delayHint?.segmentsPassed} relax=$relaxDelayMargin",
+            )
             val result = AutoSyncTimelineRetimer.retime(
-                reference = track.cues.map { cue ->
-                    SubtitleSyncCue(cue.startMs, cue.endMs, cue.text)
-                },
+                reference = reference,
                 target = target,
                 coarseScale = 1.0,
                 coarseInterceptMs = 0.0,
                 discoverAlignment = true,
+                allowAmbiguousDelayOnlyMargin = relaxDelayMargin,
                 referenceEstimatedEndStartsMs = estimated,
-            ) ?: continue
-            if (!result.confident) continue
+                preparedReferenceActivity = referenceActivity,
+                preparedTargetActivity = targetActivity,
+                precomputedDelayOnly = delayHint,
+                precomputedDelayOnlyEvidence = evidence,
+                allowPrecomputedDelayFastPath = delayHint != null,
+            )
+            AutoSyncTrace.log(
+                "matcher: ref ${AutoSyncTrace.describe(track)} -> ${result?.let(AutoSyncTrace::describe) ?: "null"}",
+            )
+            if (result == null || !result.confident) continue
             val current = best
             if (current == null || result.targetCoverage > current.targetCoverage) {
                 best = result
@@ -54,6 +108,13 @@ internal object AutoSyncSelectedRun {
             if (result.targetCoverage >= 0.99 && result.referenceCoverage >= 0.97) break
         }
         return best
+    }
+
+    /** Name-based half of Android's isSdhReferenceTrack; the index carries no role flags. */
+    private fun isSdh(track: EmbeddedTextTrack): Boolean {
+        val label = track.name.orEmpty().lowercase()
+        return listOf("sdh", "shd", "hoh", "hearing impaired", "hearing-impaired", "closed caption")
+            .any { label.contains(it) }
     }
 
     private fun isFullDialogue(track: EmbeddedTextTrack): Boolean {

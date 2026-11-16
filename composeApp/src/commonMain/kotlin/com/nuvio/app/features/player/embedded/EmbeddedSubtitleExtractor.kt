@@ -567,7 +567,13 @@ internal object EmbeddedSubtitleExtractor {
         if (refs.isEmpty()) return DialogueTimingIndex(tracks = textTracks)
         val scale = layout.timestampScale.coerceAtLeast(1L)
         val timedText = textTracks.map { track ->
-            track.copy(cues = cueStartsToTimeline(refs, track.trackNumber, scale), estimatedCueEnds = true)
+            val trackRefs = refs.filter { it.trackNumber == track.trackNumber }
+            // Same as Android's index loader: real CueDuration beats a guessed end.
+            val explicit = trackRefs.isNotEmpty() && trackRefs.all { (it.durationTicks ?: 0L) > 0L }
+            track.copy(
+                cues = cueStartsToTimeline(refs, track.trackNumber, scale),
+                estimatedCueEnds = !explicit,
+            )
         }
         if (timedText.isNotEmpty()) {
             return DialogueTimingIndex(tracks = timedText)
@@ -615,10 +621,17 @@ internal object EmbeddedSubtitleExtractor {
         trackNumber: Long,
         scale: Long,
     ): List<EmbeddedSubtitleCue> {
+        val durations = refs.filter { it.trackNumber == trackNumber }
+            .associate { it.timeTicks * scale / 1_000_000L to it.durationTicks?.let { d -> d * scale / 1_000_000L } }
         val starts = cueStartList(refs, trackNumber, scale)
         return starts.mapIndexed { index, start ->
             val next = starts.getOrNull(index + 1)
-            val end = if (next == null) start + 2_000L else minOf(next, start + 4_000L)
+            val explicit = durations[start]?.takeIf { it > 0L }
+            val end = when {
+                explicit != null -> start + explicit
+                next == null -> start + 2_000L
+                else -> minOf(next, start + 4_000L)
+            }
             EmbeddedSubtitleCue(start, end.coerceAtLeast(start + 1L), "")
         }
     }

@@ -434,7 +434,7 @@ private fun SubtitleOptionRow(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SubtitleSourceChip(label = sourceLabel, selected = selected)
+            if (sourceLabel.isNotBlank()) SubtitleSourceChip(label = sourceLabel, selected = selected)
             Text(
                 text = title,
                 color = if (selected) tokens.colors.onAccent else Color.White,

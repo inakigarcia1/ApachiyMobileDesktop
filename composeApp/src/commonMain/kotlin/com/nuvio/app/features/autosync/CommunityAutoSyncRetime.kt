@@ -35,8 +35,13 @@ internal object CommunityAutoSyncRetime {
     ): CommunityAutoSyncAttempt? {
         val body = runCatching {
             httpGetTextWithHeaders(url = subtitleUrl, headers = headers)
+        }.onFailure {
+            AutoSyncTrace.log("retime: download failed ${AutoSyncTrace.shortUrl(subtitleUrl)} err=${it.message}")
         }.getOrNull() ?: return null
         val cues = PlayerSubtitleCueParser.parse(body, subtitleUrl)
+        AutoSyncTrace.log(
+            "retime: ${AutoSyncTrace.shortUrl(subtitleUrl)} bytes=${body.length} cues=${cues.size} refs=${references.size}",
+        )
         val timeline = AutoSyncSelectedRun.retime(references, cues) ?: return null
         return CommunityAutoSyncAttempt(subtitleUrl = subtitleUrl, cues = cues, timeline = timeline)
     }

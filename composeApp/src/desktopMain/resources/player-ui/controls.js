@@ -1156,7 +1156,7 @@ const appendSubtitleOptionRow = option => {
   const source = document.createElement("span");
   source.className = "subtitle-source-chip";
   source.textContent = option.sourceLabel;
-  copy.appendChild(source);
+  if (option.sourceLabel) copy.appendChild(source);
   const title = document.createElement("span");
   title.className = "subtitle-option-title";
   title.textContent = option.title;
@@ -3141,7 +3141,7 @@ window.playerControls = nextState => {
   }
   const notificationToken = Number(state.notificationToken) || 0;
   if (notificationToken !== previousNotificationToken) {
-    showPlayerToast(state.notificationMessage, { durationMs: 4500 });
+    showPlayerToast(state.notificationMessage, { durationMs: 8000 });
   }
   if (state.showP2pConsent && activeModal !== "p2pConsent") {
     openPlayerModal("p2pConsent");

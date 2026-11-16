@@ -44,6 +44,8 @@ internal data class MkvCueRef(
     val trackNumber: Long,
     val clusterPosition: Long,
     val relativePosition: Long?,
+    /** CueDuration in segment ticks; muxers write it for subtitle tracks. */
+    val durationTicks: Long? = null,
 )
 
 internal data class DialogueTimingIndex(

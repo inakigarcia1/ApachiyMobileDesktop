@@ -32,6 +32,7 @@ internal object MkvTextSubtitleParser {
     private const val ID_CUE_TRACK = 0xF7L
     private const val ID_CUE_CLUSTER_POSITION = 0xF1L
     private const val ID_CUE_RELATIVE_POSITION = 0xF0L
+    private const val ID_CUE_DURATION = 0xB2L
     private const val TRACK_TYPE_SUBTITLE = 0x11L
 
     fun parse(data: ByteArray): List<EmbeddedTextTrack> = parseLayout(data).tracks
@@ -237,6 +238,7 @@ internal object MkvTextSubtitleParser {
                     var trackNumber = -1L
                     var clusterPosition = -1L
                     var relativePosition: Long? = null
+                    var durationTicks: Long? = null
                     var inner = contentStart
                     while (inner < contentEnd) {
                         val innerHeader = readElementHeader(data, inner) ?: break
@@ -246,11 +248,12 @@ internal object MkvTextSubtitleParser {
                             ID_CUE_TRACK -> trackNumber = readUnsigned(data, innerStart, innerHeader.size.toInt())
                             ID_CUE_CLUSTER_POSITION -> clusterPosition = readUnsigned(data, innerStart, innerHeader.size.toInt())
                             ID_CUE_RELATIVE_POSITION -> relativePosition = readUnsigned(data, innerStart, innerHeader.size.toInt())
+                            ID_CUE_DURATION -> durationTicks = readUnsigned(data, innerStart, innerHeader.size.toInt())
                         }
                         inner = innerEnd
                     }
                     if (trackNumber >= 0 && clusterPosition >= 0) {
-                        refs += MkvCueRef(timeTicks, trackNumber, clusterPosition, relativePosition)
+                        refs += MkvCueRef(timeTicks, trackNumber, clusterPosition, relativePosition, durationTicks)
                     }
                 }
             }

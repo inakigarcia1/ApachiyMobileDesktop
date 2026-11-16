@@ -445,6 +445,15 @@ internal object AutoSyncTimelineRetimer {
                 } &&
                 simpleRatio >= DISCOVERED_MIN_SIMPLE_GROUP_RATIO
 
+        if (!confirmed) {
+            AutoSyncTrace.log(
+                "gate: rejected offset=${candidateInterceptMs.toLong()} dpConfident=${result.confident} " +
+                    "actScore=${candidateActivityScore} (need>=$requiredActivityScore) " +
+                    "actMargin=${candidateActivityMargin} (need>=$requiredActivityMargin, delayOnly=$delayOnly relax=$allowAmbiguousDelayOnlyMargin) " +
+                    "covSeg=$coverageSegments/$requiredCoverageSegments tCov=${result.targetCoverage}/$minTargetCoverage " +
+                    "cost=${result.averageGroupCost}/$maxAverageGroupCost skipRun=${result.longestTargetSkipRun} simple=$simpleRatio/$DISCOVERED_MIN_SIMPLE_GROUP_RATIO",
+            )
+        }
         return result.copy(
             confident = confirmed,
             alignmentSource = if (delayOnly) "delay-only-validated" else "activity-correlation",
@@ -1152,6 +1161,7 @@ internal object AutoSyncTimelineRetimer {
             }
             .maxByOrNull { it.score }
         val margin = coarseBest.score - (secondDistinct?.score ?: 0.0)
+        AutoSyncTrace.log("activity: best=$coarseBest second=$secondDistinct")
 
         val referenceFine = referenceActivity.fine
         val targetFine = if (coarseBest.scale == 1.0) {
@@ -1393,12 +1403,14 @@ internal object AutoSyncTimelineRetimer {
         second: ActivityCandidate,
         targetEndMs: Double,
     ): Boolean {
-        val startDifference = abs(first.interceptMs - second.interceptMs).toDouble()
-        val endDifference = abs(
+        val startDifference = (first.interceptMs - second.interceptMs).toDouble()
+        val endDifference =
             targetEndMs * first.scale + first.interceptMs -
-                (targetEndMs * second.scale + second.interceptMs),
-        )
-        return max(startDifference, endDifference) >= ACTIVITY_DISTINCT_TRANSFORM_MS
+                (targetEndMs * second.scale + second.interceptMs)
+        // A transform that crosses the winner inside the episode (e.g. the mirrored 0.999 FPS ratio)
+        // shares that alignment; only one that stays apart over the whole span is a rival.
+        if (startDifference * endDifference <= 0.0) return false
+        return minOf(abs(startDifference), abs(endDifference)) >= ACTIVITY_DISTINCT_TRANSFORM_MS
     }
 
     private fun coverageSegmentsPassed(
